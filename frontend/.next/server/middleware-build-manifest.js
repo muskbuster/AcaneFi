@@ -24,11 +24,6 @@ self.__BUILD_MANIFEST = {
       "static/chunks/main.js",
       "static/chunks/pages/_error.js"
     ],
-    "/mint-mockusdc": [
-      "static/chunks/webpack.js",
-      "static/chunks/main.js",
-      "static/chunks/pages/mint-mockusdc.js"
-    ],
     "/trader/[traderId]": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",

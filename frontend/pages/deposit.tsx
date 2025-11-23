@@ -361,12 +361,20 @@ export default function Deposit() {
 
       setCurrentTxType('approve');
       try {
-        writeContract({
+        const contractConfig: any = {
           address: usdcAddress,
           abi: USDC_ABI,
           functionName: 'approve',
           args: [spenderAddress, depositAmount],
-        });
+        };
+        
+        // Add explicit gas parameters for Rari Testnet to prevent incorrect fee estimates
+        if (depositMethod === 'rari') {
+          contractConfig.maxFeePerGas = 2000000000n; // 2 gwei
+          contractConfig.maxPriorityFeePerGas = 1000000000n; // 1 gwei
+        }
+        
+        writeContract(contractConfig);
       } catch (writeErr: any) {
         console.error('Write contract error:', writeErr);
         setError(writeErr.message || 'Failed to submit approval transaction');
@@ -479,6 +487,9 @@ export default function Deposit() {
             abi: UNIFIED_VAULT_ABI,
             functionName: 'depositRari',
             args: [BigInt(selectedTrader), depositAmount],
+            // Explicit gas parameters for Rari Testnet to prevent incorrect fee estimates
+            maxFeePerGas: 2000000000n, // 2 gwei
+            maxPriorityFeePerGas: 1000000000n, // 1 gwei
           });
         } catch (writeErr: any) {
           console.error('Write contract error:', writeErr);
