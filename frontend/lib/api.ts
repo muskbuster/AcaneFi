@@ -169,13 +169,55 @@ export const cctpApi = {
     maxAttempts?: number,
     intervalMs?: number
   ) => {
-    const response = await api.post('/api/cctp/poll-attestation', {
-      sourceDomain,
-      transactionHash,
-      maxAttempts,
-      intervalMs,
-    });
-    return response.data;
+    // Call Circle's API directly (following test pattern)
+    const ATTESTATION_API_URL = "https://iris-api-sandbox.circle.com/v2/messages";
+    const maxRetries = maxAttempts || 60; // 5 minutes max
+    const retryInterval = intervalMs || 5000; // 5 seconds
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const url = `${ATTESTATION_API_URL}/${sourceDomain}?transactionHash=${transactionHash}`;
+        const response = await axios.get(url);
+        
+        if (response.status === 404) {
+          console.log(`⏳ Waiting for attestation... (attempt ${i + 1}/${maxRetries})`);
+          if (i < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, retryInterval));
+          }
+          continue;
+        }
+
+        if (response.data?.messages?.[0]?.status === "complete") {
+          const messageData = response.data.messages[0];
+          console.log(`✅ Attestation retrieved successfully!`);
+          return {
+            message: messageData.message,
+            attestation: messageData.attestation,
+            status: 'complete',
+          };
+        }
+
+        if (response.data?.messages?.[0]?.status === "pending") {
+          console.log(`⏳ Attestation pending... (attempt ${i + 1}/${maxRetries})`);
+        }
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          console.log(`⏳ Waiting for attestation... (attempt ${i + 1}/${maxRetries})`);
+        } else if (error.response?.status === 400) {
+          console.error(`❌ Bad request: ${error.response?.data?.message || error.message}`);
+          throw new Error(`Invalid request: ${error.response?.data?.message || 'Check transaction hash and source domain'}`);
+        } else {
+          console.log(`⚠️  Error: ${error.message}`);
+          // Don't throw on network errors, just retry
+        }
+      }
+
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, retryInterval));
+      }
+    }
+
+    throw new Error(`Attestation not found after ${maxRetries} attempts`);
   },
 
   getSupportedChains: async () => {
@@ -187,12 +229,110 @@ export const cctpApi = {
    * Receive bridged USDC on Base Sepolia
    * Calls backend endpoint which calls UnifiedVault.receiveBridgedUSDC
    */
-  receiveBridgedUSDC: async (message: string, attestation: string) => {
-    const response = await api.post('/api/cctp/receive', {
-      message,
-      attestation,
+  /**
+   * Store CCTP deposit information in backend
+   */
+  storeDeposit: async (data: {
+    userAddress: string;
+    transactionHash: string;
+    sourceDomain: number;
+    sourceChainId: number;
+    sourceChainName: string;
+  }) => {
+    const response = await api.post('/api/cctp/deposit', data);
+    return response.data;
+  },
+
+  /**
+   * Get unredeemed CCTP deposits for a user
+   */
+  getUnredeemedDeposits: async (userAddress: string) => {
+    const response = await api.get('/api/cctp/deposits', {
+      params: { userAddress },
     });
     return response.data;
+  },
+
+  /**
+   * Update attestation for a deposit
+   */
+  updateAttestation: async (data: {
+    id?: string;
+    transactionHash?: string;
+    userAddress?: string;
+    attestation: {
+      message: string;
+      attestation: string;
+      status: string;
+    };
+  }) => {
+    const response = await api.post('/api/cctp/attestation', data);
+    return response.data;
+  },
+
+  /**
+   * Mark deposit as redeemed (and delete from storage)
+   */
+  markAsRedeemed: async (data: {
+    id?: string;
+    transactionHash?: string;
+    userAddress?: string;
+    redeemTxHash: string;
+  }) => {
+    const response = await api.post('/api/cctp/redeem', data);
+    return response.data;
+  },
+
+  receiveBridgedUSDC: async (message: string, attestation: string) => {
+    // Validate inputs
+    if (!message || !attestation) {
+      throw new Error('Message and attestation are required');
+    }
+    
+    if (typeof message !== 'string' || typeof attestation !== 'string') {
+      throw new Error('Message and attestation must be strings');
+    }
+    
+    if (!message.startsWith('0x') || !attestation.startsWith('0x')) {
+      throw new Error('Message and attestation must be hex strings starting with 0x');
+    }
+
+    console.log('📤 Calling receiveBridgedUSDC API:', {
+      message: message.substring(0, 30) + '...',
+      attestation: attestation.substring(0, 30) + '...',
+      messageLength: message.length,
+      attestationLength: attestation.length,
+    });
+
+    try {
+      const response = await api.post('/api/cctp/receive', {
+        message,
+        attestation,
+      }, {
+        timeout: 60000, // 60 second timeout (same as test)
+      });
+      
+      console.log('✅ Receive API response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Receive API error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+      });
+      
+      // Provide more detailed error message
+      if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      }
+      
+      if (error.response?.status === 500) {
+        throw new Error(`Server error: ${error.response?.data?.error || error.message || 'Failed to receive USDC'}`);
+      }
+      
+      throw error;
+    }
   },
 };
 
@@ -212,6 +352,44 @@ export const rariApi = {
     signature: string;
   }) => {
     const response = await api.post('/api/tee/verify-rari-deposit', data);
+    return response.data;
+  },
+
+  /**
+   * Store deposit information in backend
+   */
+  storeDeposit: async (data: {
+    userAddress: string;
+    amount: string; // in wei
+    amountFormatted: string; // human readable
+    nonce: string;
+    sourceChainId: string;
+    depositTxHash: string;
+  }) => {
+    const response = await api.post('/api/rari/deposit', data);
+    return response.data;
+  },
+
+  /**
+   * Get unredeemed deposits for a user
+   */
+  getUnredeemedDeposits: async (userAddress: string) => {
+    const response = await api.get('/api/rari/deposits', {
+      params: { userAddress },
+    });
+    return response.data;
+  },
+
+  /**
+   * Mark deposit as redeemed
+   */
+  markAsRedeemed: async (data: {
+    id?: string;
+    nonce?: string;
+    userAddress?: string;
+    redeemTxHash: string;
+  }) => {
+    const response = await api.post('/api/rari/redeem', data);
     return response.data;
   },
 };

@@ -34,7 +34,7 @@ export default function Header() {
                   Rari
                 </Link>
                 <Link
-                  href="/receive-cctp"
+                  href="/receive"
                   className="px-4 py-2 text-gray-700 hover:text-primary-600 transition"
                 >
                   Receive

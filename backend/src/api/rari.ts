@@ -1,5 +1,6 @@
 import express from 'express';
 import { cdpWalletService } from '../services/cdpWalletService.js';
+import { rariDepositStorage } from '../services/rariDepositStorage.js';
 import { ethers } from 'ethers';
 
 const rariRouter = express.Router();
@@ -158,6 +159,181 @@ rariRouter.get('/attestation', async (req, res) => {
     res.status(500).json({
       error: error.message || 'Failed to generate attestation',
       success: false
+    });
+  }
+});
+
+/**
+ * Store Rari deposit information
+ * POST /api/rari/deposit
+ * 
+ * Body:
+ * {
+ *   "userAddress": "0x...",
+ *   "amount": "1000000", // Amount in wei (6 decimals)
+ *   "amountFormatted": "1.0", // Human readable amount
+ *   "nonce": "1234567890",
+ *   "sourceChainId": "1918988905",
+ *   "depositTxHash": "0x..."
+ * }
+ */
+rariRouter.post('/deposit', async (req, res) => {
+  try {
+    const { userAddress, amount, amountFormatted, nonce, sourceChainId, depositTxHash } = req.body;
+
+    if (!userAddress || !amount || !nonce || !depositTxHash) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['userAddress', 'amount', 'nonce', 'depositTxHash'],
+      });
+    }
+
+    // Validate userAddress format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(userAddress)) {
+      return res.status(400).json({
+        error: 'Invalid user address format',
+      });
+    }
+
+    // Check if deposit with this nonce already exists
+    const existing = rariDepositStorage.getDepositByNonce(nonce, userAddress);
+    if (existing) {
+      return res.status(409).json({
+        error: 'Deposit with this nonce already exists',
+        deposit: existing,
+      });
+    }
+
+    const deposit = rariDepositStorage.storeDeposit({
+      userAddress,
+      amount,
+      amountFormatted: amountFormatted || ethers.formatUnits(amount, 6),
+      nonce,
+      sourceChainId: sourceChainId || '1918988905',
+      depositTxHash,
+    });
+
+    res.json({
+      success: true,
+      deposit,
+      message: 'Deposit stored successfully',
+    });
+  } catch (error: any) {
+    console.error('Store Rari deposit error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to store deposit',
+      success: false,
+    });
+  }
+});
+
+/**
+ * Get unredeemed deposits for a user
+ * GET /api/rari/deposits?userAddress=0x...
+ */
+rariRouter.get('/deposits', async (req, res) => {
+  try {
+    const userAddress = req.query.userAddress as string;
+
+    if (!userAddress) {
+      return res.status(400).json({
+        error: 'userAddress query parameter is required',
+      });
+    }
+
+    // Validate userAddress format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(userAddress)) {
+      return res.status(400).json({
+        error: 'Invalid user address format',
+      });
+    }
+
+    const deposits = rariDepositStorage.getUnredeemedDeposits(userAddress);
+
+    res.json({
+      success: true,
+      deposits,
+      count: deposits.length,
+    });
+  } catch (error: any) {
+    console.error('Get Rari deposits error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to get deposits',
+      success: false,
+    });
+  }
+});
+
+/**
+ * Get all unredeemed deposits (admin/any user)
+ * GET /api/rari/deposits/all
+ */
+rariRouter.get('/deposits/all', async (req, res) => {
+  try {
+    const deposits = rariDepositStorage.getAllUnredeemedDeposits();
+
+    res.json({
+      success: true,
+      deposits,
+      count: deposits.length,
+    });
+  } catch (error: any) {
+    console.error('Get all Rari deposits error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to get deposits',
+      success: false,
+    });
+  }
+});
+
+/**
+ * Mark deposit as redeemed
+ * POST /api/rari/redeem
+ * 
+ * Body:
+ * {
+ *   "id": "deposit-id" or "nonce": "1234567890",
+ *   "userAddress": "0x...", // Optional if using nonce
+ *   "redeemTxHash": "0x..."
+ * }
+ */
+rariRouter.post('/redeem', async (req, res) => {
+  try {
+    const { id, nonce, userAddress, redeemTxHash } = req.body;
+
+    if (!redeemTxHash) {
+      return res.status(400).json({
+        error: 'redeemTxHash is required',
+      });
+    }
+
+    let deposit;
+    if (id) {
+      deposit = rariDepositStorage.markAsRedeemed(id, redeemTxHash);
+    } else if (nonce) {
+      deposit = rariDepositStorage.markAsRedeemedByNonce(nonce, redeemTxHash, userAddress);
+    } else {
+      return res.status(400).json({
+        error: 'Either id or nonce is required',
+      });
+    }
+
+    if (!deposit) {
+      return res.status(404).json({
+        error: 'Deposit not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      deposit,
+      message: 'Deposit marked as redeemed',
+    });
+  } catch (error: any) {
+    console.error('Mark Rari deposit as redeemed error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to mark deposit as redeemed',
+      success: false,
     });
   }
 });

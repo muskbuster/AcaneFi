@@ -49,7 +49,29 @@ export default function ReceiveCCTP() {
     }
 
     if (chainId !== baseSepolia.id) {
-      setError('Please switch to Base Sepolia');
+      setError('Please switch to Base Sepolia first');
+      return;
+    }
+
+    // Validate attestation structure
+    if (!attestation.message || !attestation.attestation) {
+      setError('Invalid attestation data. Please fetch attestation again.');
+      console.error('Invalid attestation structure:', attestation);
+      return;
+    }
+
+    // Validate hex strings
+    if (typeof attestation.message !== 'string' || typeof attestation.attestation !== 'string') {
+      setError('Attestation message and attestation must be strings');
+      console.error('Invalid attestation types:', {
+        messageType: typeof attestation.message,
+        attestationType: typeof attestation.attestation,
+      });
+      return;
+    }
+
+    if (!attestation.message.startsWith('0x') || !attestation.attestation.startsWith('0x')) {
+      setError('Attestation message and attestation must be hex strings starting with 0x');
       return;
     }
 
@@ -57,11 +79,20 @@ export default function ReceiveCCTP() {
     setError('');
 
     try {
+      console.log('📤 Receiving USDC with attestation:', {
+        message: attestation.message.substring(0, 30) + '...',
+        attestation: attestation.attestation.substring(0, 30) + '...',
+        messageLength: attestation.message.length,
+        attestationLength: attestation.attestation.length,
+      });
+
       // Use API endpoint which uses CDP wallet
       const result = await cctpApi.receiveBridgedUSDC(
         attestation.message,
         attestation.attestation
       );
+
+      console.log('✅ Receive result:', result);
 
       if (result.success) {
         alert(`USDC received successfully! Transaction: ${result.transactionHash}`);
@@ -71,7 +102,12 @@ export default function ReceiveCCTP() {
         setError(result.error || 'Failed to receive USDC');
       }
     } catch (err: any) {
-      console.error('Receive error:', err);
+      console.error('❌ Receive error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+      });
       setError(err.message || 'Failed to receive USDC');
     } finally {
       setLoading(false);

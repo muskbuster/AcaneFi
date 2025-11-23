@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, useReadContract, useBalance } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { parseUnits } from 'viem';
+import { parseUnits, formatUnits } from 'viem';
 import { teeApi, cctpApi } from '../lib/api';
 import { sepolia, baseSepolia } from 'wagmi/chains';
 import { 
@@ -38,38 +38,128 @@ export default function Deposit() {
   const [step, setStep] = useState<DepositStep>('approve');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [approveTxHash, setApproveTxHash] = useState<string>('');
   const [depositTxHash, setDepositTxHash] = useState<string>('');
   const [attestation, setAttestation] = useState<any>(null);
   const [fetchingAttestation, setFetchingAttestation] = useState(false);
   const [receiving, setReceiving] = useState(false);
+  const [currentTxType, setCurrentTxType] = useState<'approve' | 'deposit' | null>(null);
 
-  const { writeContract, data: txHash } = useWriteContract();
-  const { isLoading: isPending, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const { writeContract, data: txHash, error: writeError, isError: isWriteError, reset: resetWriteContract } = useWriteContract();
+  
+  // Separate hooks for approval and deposit transactions
+  const { isLoading: isApprovePending, isSuccess: isApproveSuccess } = useWaitForTransactionReceipt({ 
+    hash: approveTxHash ? approveTxHash as `0x${string}` : undefined 
+  });
+  const { isLoading: isDepositPending, isSuccess: isDepositSuccess } = useWaitForTransactionReceipt({ 
+    hash: depositTxHash ? depositTxHash as `0x${string}` : undefined 
+  });
+
+  const isPending = isApprovePending || isDepositPending;
+
+  // Get chain and addresses
+  const chain = chainId === baseSepolia.id ? 'base-sepolia' : 'ethereum-sepolia';
+  const usdcAddress = getUSDCAddress(chain);
+  const tokenMessengerAddress = chainId === sepolia.id ? getCCTPTokenMessengerAddress(chain) : null;
+
+  // Check USDC balance
+  const { data: usdcBalance } = useBalance({
+    address: address,
+    token: usdcAddress,
+    chainId: chainId,
+    query: {
+      enabled: !!address && !!usdcAddress,
+      refetchInterval: 5000,
+    },
+  });
+
+  // Check approval allowance (for sepolia - CCTP)
+  const { data: allowance } = useReadContract({
+    address: usdcAddress,
+    abi: USDC_ABI,
+    functionName: 'allowance',
+    args: address && tokenMessengerAddress ? [address, tokenMessengerAddress] : undefined,
+    chainId: chainId,
+    query: {
+      enabled: !!address && !!tokenMessengerAddress && !!usdcAddress && chainId === sepolia.id,
+      refetchInterval: 5000,
+    },
+  });
 
   useEffect(() => {
     loadTraders();
   }, []);
 
+  // Handle write contract errors
   useEffect(() => {
-    if (isSuccess && step === 'approve') {
+    if (isWriteError && writeError) {
+      console.error('Write contract error:', writeError);
+      setError(writeError.message || 'Transaction failed. Please try again.');
+      setLoading(false);
+      setCurrentTxType(null);
+      // Reset the write contract state after a delay
+      setTimeout(() => {
+        resetWriteContract();
+      }, 3000);
+    }
+  }, [isWriteError, writeError, resetWriteContract]);
+
+  // Track transaction hash based on current transaction type
+  useEffect(() => {
+    if (txHash && currentTxType) {
+      if (currentTxType === 'approve') {
+        setApproveTxHash(txHash);
+        setCurrentTxType(null); // Reset after capturing
+      } else if (currentTxType === 'deposit') {
+        setDepositTxHash(txHash);
+        setCurrentTxType(null); // Reset after capturing
+      }
+    }
+  }, [txHash, currentTxType]);
+
+  // Handle approval success
+  useEffect(() => {
+    if (isApproveSuccess && approveTxHash) {
       setStep('deposit');
-    } else if (isSuccess && step === 'deposit') {
+      setLoading(false);
+    }
+  }, [isApproveSuccess, approveTxHash]);
+
+  // Handle deposit/burn success - only fetch attestation after deposit succeeds
+  useEffect(() => {
+    if (isDepositSuccess && depositTxHash) {
+      setLoading(false);
       if (chainId === sepolia.id) {
-        // CCTP deposit - fetch attestation
+        // CCTP deposit - store in backend and fetch attestation after burn transaction
+        if (address) {
+          cctpApi.storeDeposit({
+            userAddress: address,
+            transactionHash: depositTxHash,
+            sourceDomain: 0, // Ethereum Sepolia
+            sourceChainId: sepolia.id,
+            sourceChainName: 'Ethereum Sepolia',
+          }).then(() => {
+            console.log('✅ CCTP deposit stored in backend');
+          }).catch((err) => {
+            console.error('Failed to store CCTP deposit:', err);
+            // Don't block the flow if storage fails
+          });
+        }
         setStep('attestation');
-        fetchAttestation();
       } else {
         // Direct deposit on Base Sepolia
         setStep('complete');
       }
     }
-  }, [isSuccess, step, chainId]);
+  }, [isDepositSuccess, depositTxHash, chainId, address]);
 
+  // Fetch attestation when step changes to 'attestation' and we have a deposit tx hash
   useEffect(() => {
-    if (txHash && step === 'deposit') {
-      setDepositTxHash(txHash);
+    if (step === 'attestation' && depositTxHash && !attestation && !fetchingAttestation) {
+      fetchAttestation();
     }
-  }, [txHash, step]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, depositTxHash]);
 
   const loadTraders = async () => {
     try {
@@ -92,8 +182,16 @@ export default function Deposit() {
       return;
     }
 
-    setLoading(true);
+    // Check balance first
+    if (!usdcBalance || usdcBalance.value < parseUnits(amount, 6)) {
+      setError(`Insufficient USDC balance. You have ${usdcBalance ? formatUnits(usdcBalance.value, 6) : '0'} USDC, but need ${amount} USDC.`);
+      return;
+    }
+
+    // Reset any previous errors
     setError('');
+    setLoading(true);
+    resetWriteContract(); // Reset write contract state
 
     try {
       const chain = getCurrentChain();
@@ -116,12 +214,26 @@ export default function Deposit() {
         spenderAddress = vaultAddress;
       }
 
-      writeContract({
-        address: usdcAddress,
-        abi: USDC_ABI,
-        functionName: 'approve',
-        args: [spenderAddress, depositAmount],
+      console.log('📝 Approving USDC:', {
+        token: usdcAddress,
+        spender: spenderAddress,
+        amount: depositAmount.toString(),
+        amountFormatted: amount,
       });
+
+      setCurrentTxType('approve'); // Mark that we're submitting an approval
+      try {
+        writeContract({
+          address: usdcAddress,
+          abi: USDC_ABI,
+          functionName: 'approve',
+          args: [spenderAddress, depositAmount],
+        });
+      } catch (writeErr: any) {
+        console.error('Write contract error:', writeErr);
+        setError(writeErr.message || 'Failed to submit approval transaction');
+        setLoading(false);
+      }
     } catch (err: any) {
       console.error('Approve error:', err);
       setError(err.message || 'Failed to approve');
@@ -135,22 +247,47 @@ export default function Deposit() {
       return;
     }
 
-    setLoading(true);
+    // Check balance
+    const depositAmount = parseUnits(amount, 6);
+    if (!usdcBalance || usdcBalance.value < depositAmount) {
+      setError(`Insufficient USDC balance. You have ${usdcBalance ? formatUnits(usdcBalance.value, 6) : '0'} USDC, but need ${amount} USDC.`);
+      return;
+    }
+
+    // Check approval for sepolia (CCTP) - following test pattern
+    if (chainId === sepolia.id) {
+      if (!allowance || allowance < depositAmount) {
+        setError(`Insufficient approval for TokenMessenger. Please approve USDC first. Current allowance: ${allowance ? formatUnits(allowance, 6) : '0'} USDC, needed: ${amount} USDC`);
+        return;
+      }
+      console.log('✅ TokenMessenger approval verified:', {
+        allowance: formatUnits(allowance, 6),
+        needed: amount,
+        sufficient: allowance >= depositAmount,
+      });
+    }
+
+    // Reset any previous errors
     setError('');
+    setLoading(true);
+    resetWriteContract(); // Reset write contract state
 
     try {
       const chain = getCurrentChain();
       
-      const validation = await teeApi.validateDeposit(selectedTrader);
-      if (!validation.valid) {
-        setError(validation.error || 'Trader not found');
-        setLoading(false);
-        return;
-      }
+      // Trader validation is done on-chain - no need to call backend
+      // The trader list already comes from on-chain, so if it's in the list, it's valid
 
-      const depositAmount = parseUnits(amount, 6);
       const maxFee = parseUnits('0.1', 6);
       const minFinalityThreshold = 1000; // Fast transfer
+
+      console.log('📝 Depositing USDC:', {
+        chain: chain,
+        chainId: chainId,
+        traderId: selectedTrader,
+        amount: depositAmount.toString(),
+        amountFormatted: amount,
+      });
 
       if (chainId === sepolia.id) {
         // CCTP deposit from Ethereum Sepolia - call TokenMessenger directly
@@ -174,20 +311,44 @@ export default function Deposit() {
           abi: USDC_ABI,
         };
         
-        writeContract({
-          address: tokenMessengerAddress,
-          abi: CCTP_TOKEN_MESSENGER_ABI,
-          functionName: 'depositForBurn',
-          args: [
-            depositAmount,
-            BASE_SEPOLIA_DOMAIN,
-            mintRecipient,
-            usdcAddress,
-            destinationCaller,
-            maxFee,
-            minFinalityThreshold,
-          ],
-        });
+        // Following test pattern: Call TokenMessenger.depositForBurn directly
+        console.log('\n📤 Calling TokenMessenger.depositForBurn (following test pattern):');
+        console.log('   Amount:', formatUnits(depositAmount, 6), 'USDC');
+        console.log('   Destination Domain:', BASE_SEPOLIA_DOMAIN, '(Base Sepolia)');
+        console.log('   Mint Recipient (TEE):', teeWallet);
+        console.log('   Mint Recipient (bytes32):', mintRecipient);
+        console.log('   Burn Token:', usdcAddress);
+        console.log('   Max Fee:', formatUnits(maxFee, 6), 'USDC');
+        console.log('   Min Finality Threshold:', minFinalityThreshold);
+        
+        setCurrentTxType('deposit'); // Mark that we're submitting a deposit/burn
+        try {
+          writeContract({
+            address: tokenMessengerAddress,
+            abi: CCTP_TOKEN_MESSENGER_ABI,
+            functionName: 'depositForBurn',
+            args: [
+              depositAmount,
+              BASE_SEPOLIA_DOMAIN,
+              mintRecipient,
+              usdcAddress,
+              destinationCaller,
+              maxFee,
+              minFinalityThreshold,
+            ],
+          });
+          console.log('✅ Transaction submitted to wallet');
+        } catch (writeErr: any) {
+          console.error('❌ Write contract error:', writeErr);
+          console.error('   Error details:', {
+            message: writeErr.message,
+            reason: writeErr.reason,
+            data: writeErr.data,
+            code: writeErr.code,
+          });
+          setError(writeErr.message || writeErr.reason || 'Failed to submit deposit transaction');
+          setLoading(false);
+        }
       } else if (chainId === baseSepolia.id) {
         // Direct deposit on Base Sepolia - deposit directly to UnifiedVault
         const vaultAddress = await getUnifiedVaultAddress(chain);
@@ -198,12 +359,19 @@ export default function Deposit() {
         }
 
         // Direct deposit on Base Sepolia - no bridging needed
-        writeContract({
-          address: vaultAddress,
-          abi: UNIFIED_VAULT_ABI,
-          functionName: 'depositViaCCTP',
-          args: [BigInt(selectedTrader), depositAmount, maxFee, minFinalityThreshold],
-        });
+        setCurrentTxType('deposit'); // Mark that we're submitting a deposit
+        try {
+          writeContract({
+            address: vaultAddress,
+            abi: UNIFIED_VAULT_ABI,
+            functionName: 'depositViaCCTP',
+            args: [BigInt(selectedTrader), depositAmount, maxFee, minFinalityThreshold],
+          });
+        } catch (writeErr: any) {
+          console.error('Write contract error:', writeErr);
+          setError(writeErr.message || 'Failed to submit deposit transaction');
+          setLoading(false);
+        }
       }
     } catch (err: any) {
       console.error('Deposit error:', err);
@@ -248,14 +416,41 @@ export default function Deposit() {
       return;
     }
 
+    // Validate attestation structure
+    if (!attestation.message || !attestation.attestation) {
+      setError('Invalid attestation data. Please fetch attestation again.');
+      console.error('Invalid attestation structure:', attestation);
+      return;
+    }
+
+    // Validate hex strings
+    if (typeof attestation.message !== 'string' || typeof attestation.attestation !== 'string') {
+      setError('Attestation message and attestation must be strings');
+      return;
+    }
+
+    if (!attestation.message.startsWith('0x') || !attestation.attestation.startsWith('0x')) {
+      setError('Attestation message and attestation must be hex strings starting with 0x');
+      return;
+    }
+
     setReceiving(true);
     setError('');
 
     try {
+      console.log('📤 Receiving USDC with attestation:', {
+        message: attestation.message.substring(0, 30) + '...',
+        attestation: attestation.attestation.substring(0, 30) + '...',
+        messageLength: attestation.message.length,
+        attestationLength: attestation.attestation.length,
+      });
+
       const result = await cctpApi.receiveBridgedUSDC(
         attestation.message,
         attestation.attestation
       );
+
+      console.log('✅ Receive result:', result);
 
       if (result.success) {
         setStep('received');
@@ -264,7 +459,12 @@ export default function Deposit() {
         setError(result.error || 'Failed to receive USDC');
       }
     } catch (err: any) {
-      console.error('Receive error:', err);
+      console.error('❌ Receive error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+      });
       setError(err.message || 'Failed to receive USDC');
     } finally {
       setReceiving(false);
@@ -326,7 +526,7 @@ export default function Deposit() {
               ) : (
                 <p className="mt-2 text-sm">
                   Switch to Base Sepolia to receive USDC, or go to{' '}
-                  <Link href="/receive-cctp" className="underline">Receive CCTP</Link> page
+                  <Link href="/receive" className="underline">Receive</Link> page
                 </p>
               )}
             </div>
@@ -471,7 +671,7 @@ export default function Deposit() {
                 {chainId === sepolia.id && (
                   <>
                     {' '}Deposits from Ethereum Sepolia use CCTP. After deposit, go to{' '}
-                    <Link href="/receive-cctp" className="underline">Receive CCTP</Link> page.
+                    <Link href="/receive" className="underline">Receive</Link> page.
                   </>
                 )}
                 {chainId === baseSepolia.id && (

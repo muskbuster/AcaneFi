@@ -1,4 +1,7 @@
-node_modules/
+node_modules
+
+# Backend data storage
+backend/data//
 .env
 .env.local
 dist/
@@ -9,4 +12,6 @@ coverage/
 .cache/
 artifacts/
 typechain-types/
+frontend/.next/
+frontend/next-env.d.ts
 

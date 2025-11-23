@@ -37,14 +37,24 @@ export default function DepositRari() {
   const [step, setStep] = useState<DepositStep>('approve');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [approveTxHash, setApproveTxHash] = useState<string>('');
   const [depositTxHash, setDepositTxHash] = useState<string>('');
   const [attestation, setAttestation] = useState<any>(null);
   const [fetchingAttestation, setFetchingAttestation] = useState(false);
   const [receiving, setReceiving] = useState(false);
   const [nonce, setNonce] = useState<string>('');
 
-  const { writeContract, data: txHash } = useWriteContract();
-  const { isLoading: isPending, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const { writeContract, data: txHash, error: writeError, isError: isWriteError, reset: resetWriteContract } = useWriteContract();
+  
+  // Separate hooks for approval and deposit transactions
+  const { isLoading: isApprovePending, isSuccess: isApproveSuccess } = useWaitForTransactionReceipt({ 
+    hash: approveTxHash ? approveTxHash as `0x${string}` : undefined 
+  });
+  const { isLoading: isDepositPending, isSuccess: isDepositSuccess } = useWaitForTransactionReceipt({ 
+    hash: depositTxHash ? depositTxHash as `0x${string}` : undefined 
+  });
+
+  const isPending = isApprovePending || isDepositPending;
 
   // Read nonce from UnifiedVault on Rari
   const rariVaultAddress = process.env.NEXT_PUBLIC_UNIFIED_VAULT_RARI as `0x${string}`;
@@ -78,17 +88,58 @@ export default function DepositRari() {
   }, [nonceData]);
 
   useEffect(() => {
-    if (isSuccess && step === 'approve') {
+    if (isApproveSuccess && step === 'approve') {
       setStep('deposit');
-    } else if (isSuccess && step === 'deposit') {
+      setLoading(false);
+    } else if (isDepositSuccess && step === 'deposit') {
       setStep('attestation');
+      setLoading(false);
+      
+      // Store deposit in backend
+      if (address && depositTxHash && nonce && amount) {
+        const depositAmount = parseUnits(amount, 6);
+        rariApi.storeDeposit({
+          userAddress: address,
+          amount: depositAmount.toString(),
+          amountFormatted: amount,
+          nonce,
+          sourceChainId: RARI_CHAIN_ID.toString(),
+          depositTxHash,
+        }).then(() => {
+          console.log('✅ Deposit stored in backend');
+        }).catch((err) => {
+          console.error('Failed to store deposit:', err);
+          // Don't block the flow if storage fails
+        });
+      }
+      
       fetchAttestation();
     }
-  }, [isSuccess, step]);
+  }, [isApproveSuccess, isDepositSuccess, step, address, depositTxHash, nonce, amount]);
 
+  // Handle write errors
   useEffect(() => {
-    if (txHash && step === 'deposit') {
-      setDepositTxHash(txHash);
+    if (isWriteError && writeError) {
+      console.error('Write contract error:', writeError);
+      // Ignore MetaMask SDK errors (non-critical)
+      const errorMessage = writeError.message || '';
+      if (!errorMessage.includes('metamask-sdk.api.cx.metamask.io')) {
+        setError(writeError.message || 'Transaction failed');
+      }
+      setLoading(false);
+    }
+  }, [isWriteError, writeError]);
+
+  // Track transaction hashes based on current step
+  useEffect(() => {
+    if (txHash) {
+      if (step === 'approve') {
+        setApproveTxHash(txHash);
+        console.log('✅ Approval transaction hash:', txHash);
+      } else if (step === 'deposit') {
+        setDepositTxHash(txHash);
+        console.log('✅ Deposit transaction hash:', txHash);
+      }
     }
   }, [txHash, step]);
 
@@ -107,8 +158,20 @@ export default function DepositRari() {
       return;
     }
 
+    // Check if user is on Rari testnet
+    if (chainId !== RARI_CHAIN_ID) {
+      setError(`Please switch to Rari Testnet (Chain ID: ${RARI_CHAIN_ID})`);
+      try {
+        switchChain?.({ chainId: RARI_CHAIN_ID });
+      } catch (switchErr) {
+        console.error('Failed to switch chain:', switchErr);
+      }
+      return;
+    }
+
     setLoading(true);
     setError('');
+    resetWriteContract(); // Reset write contract state
 
     try {
       // Note: Rari uses MockUSDC, address should be in env
@@ -127,12 +190,31 @@ export default function DepositRari() {
         return;
       }
 
-      writeContract({
-        address: usdcAddress,
-        abi: USDC_ABI,
-        functionName: 'approve',
-        args: [vaultAddress, depositAmount],
+      console.log('📝 Approving MockUSDC:', {
+        token: usdcAddress,
+        spender: vaultAddress,
+        amount: depositAmount.toString(),
+        amountFormatted: amount,
       });
+
+      // Reset previous approval hash
+      setApproveTxHash('');
+
+      try {
+        writeContract({
+          address: usdcAddress,
+          abi: USDC_ABI,
+          functionName: 'approve',
+          args: [vaultAddress, depositAmount],
+        });
+      } catch (writeErr: any) {
+        console.error('Write contract error:', writeErr);
+        // Ignore MetaMask SDK errors (non-critical background requests)
+        if (!writeErr.message?.includes('metamask-sdk.api.cx.metamask.io')) {
+          setError(writeErr.message || 'Failed to submit approval transaction');
+          setLoading(false);
+        }
+      }
     } catch (err: any) {
       console.error('Approve error:', err);
       setError(err.message || 'Failed to approve');
@@ -146,8 +228,20 @@ export default function DepositRari() {
       return;
     }
 
+    // Check if user is on Rari testnet
+    if (chainId !== RARI_CHAIN_ID) {
+      setError(`Please switch to Rari Testnet (Chain ID: ${RARI_CHAIN_ID})`);
+      try {
+        switchChain?.({ chainId: RARI_CHAIN_ID });
+      } catch (switchErr) {
+        console.error('Failed to switch chain:', switchErr);
+      }
+      return;
+    }
+
     setLoading(true);
     setError('');
+    resetWriteContract(); // Reset write contract state
 
     try {
       const depositAmount = parseUnits(amount, 6);
@@ -158,12 +252,31 @@ export default function DepositRari() {
         return;
       }
 
-      writeContract({
-        address: vaultAddress,
-        abi: UNIFIED_VAULT_ABI,
-        functionName: 'depositRari',
-        args: [BigInt(selectedTrader), depositAmount],
+      console.log('📝 Depositing MockUSDC:', {
+        traderId: selectedTrader,
+        amount: depositAmount.toString(),
+        amountFormatted: amount,
+        vault: vaultAddress,
       });
+
+      // Reset previous deposit hash
+      setDepositTxHash('');
+
+      try {
+        writeContract({
+          address: vaultAddress,
+          abi: UNIFIED_VAULT_ABI,
+          functionName: 'depositRari',
+          args: [BigInt(selectedTrader), depositAmount],
+        });
+      } catch (writeErr: any) {
+        console.error('Write contract error:', writeErr);
+        // Ignore MetaMask SDK errors (non-critical background requests)
+        if (!writeErr.message?.includes('metamask-sdk.api.cx.metamask.io')) {
+          setError(writeErr.message || 'Failed to submit deposit transaction');
+          setLoading(false);
+        }
+      }
     } catch (err: any) {
       console.error('Deposit error:', err);
       setError(err.message || 'Failed to deposit');
@@ -272,6 +385,23 @@ export default function DepositRari() {
                   Transaction: <a href={`https://rari-testnet.calderachain.xyz/tx/${depositTxHash}`} target="_blank" rel="noopener noreferrer" className="underline">{depositTxHash.substring(0, 20)}...</a>
                 </p>
               )}
+              {nonce && (
+                <div className="mt-2 p-2 bg-white border border-yellow-300 rounded">
+                  <p className="text-xs font-semibold text-gray-700 mb-1">Save this nonce for receiving:</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono break-all">{nonce}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(nonce);
+                        alert('Nonce copied to clipboard!');
+                      }}
+                      className="ml-2 px-2 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
               {fetchingAttestation && (
                 <p className="mt-2 text-sm">Fetching attestation from TEE API...</p>
               )}
@@ -281,24 +411,78 @@ export default function DepositRari() {
           {step === 'complete' && attestation && (
             <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
               <p className="font-bold">✅ Attestation received!</p>
-              <div className="mt-2">
+              <div className="mt-2 space-y-2">
                 <p className="text-sm mb-2">Ready to receive USDC on Base Sepolia</p>
-                <button
-                  onClick={handleReceiveUSDC}
-                  disabled={receiving || chainId !== 84532}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                >
-                  {chainId !== 84532
-                    ? 'Switch to Base Sepolia to Receive'
-                    : receiving
-                    ? 'Receiving...'
-                    : 'Receive USDC on Base Sepolia'}
-                </button>
+                
+                {/* Nonce Display - Make it prominent and copyable */}
+                <div className="bg-white border border-green-300 rounded p-3 mb-2">
+                  <p className="text-xs font-semibold text-gray-700 mb-1">Save this information for receiving:</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600">Amount:</span>
+                      <span className="text-xs font-mono font-bold">{amount} USDC</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600">Nonce:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold break-all">{nonce}</span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(nonce);
+                            alert('Nonce copied to clipboard!');
+                          }}
+                          className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleReceiveUSDC}
+                    disabled={receiving || chainId !== 84532}
+                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {chainId !== 84532
+                      ? 'Switch to Base Sepolia to Receive'
+                      : receiving
+                      ? 'Receiving...'
+                      : 'Receive USDC on Base Sepolia'}
+                  </button>
+                  <Link
+                    href="/receive"
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Go to Receive Page
+                  </Link>
+                </div>
               </div>
             </div>
           )}
 
           <div className="space-y-6">
+            {/* Chain Status and Switcher */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-blue-800 mb-2">
+                Current Chain: <span className="font-bold">{chainId === RARI_CHAIN_ID ? 'Rari Testnet ✅' : `Chain ID ${chainId} (Switch to Rari Testnet)`}</span>
+              </p>
+              {chainId !== RARI_CHAIN_ID && (
+                <button
+                  onClick={() => switchChain?.({ chainId: RARI_CHAIN_ID })}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                  disabled={loading}
+                >
+                  Switch to Rari Testnet
+                </button>
+              )}
+              {chainId === RARI_CHAIN_ID && (
+                <p className="text-sm text-green-700 mt-2">✅ Connected to Rari Testnet - Ready to deposit</p>
+              )}
+            </div>
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800">
                 <strong>Rari Deposit Flow:</strong>
@@ -361,10 +545,14 @@ export default function DepositRari() {
             {step === 'approve' && (
               <button
                 onClick={handleApprove}
-                disabled={loading || isPending || !selectedTrader || !amount}
+                disabled={loading || isPending || !selectedTrader || !amount || chainId !== RARI_CHAIN_ID}
                 className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
               >
-                {loading || isPending ? 'Approving...' : '1. Approve MockUSDC'}
+                {chainId !== RARI_CHAIN_ID
+                  ? 'Switch to Rari Testnet First'
+                  : loading || isPending
+                  ? 'Approving...'
+                  : '1. Approve MockUSDC'}
               </button>
             )}
 
@@ -375,19 +563,24 @@ export default function DepositRari() {
                 </div>
                 <button
                   onClick={handleDeposit}
-                  disabled={loading || isPending}
+                  disabled={loading || isPending || chainId !== RARI_CHAIN_ID}
                   className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
                 >
-                  {loading || isPending ? 'Processing...' : '2. Deposit MockUSDC on Rari'}
+                  {chainId !== RARI_CHAIN_ID
+                    ? 'Switch to Rari Testnet First'
+                    : loading || isPending
+                    ? 'Processing...'
+                    : '2. Deposit MockUSDC on Rari'}
                 </button>
               </>
             )}
 
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-sm text-yellow-800">
-                <strong>Note:</strong> Make sure you're connected to Rari Testnet. After deposit, you'll get an attestation and can receive USDC on Base Sepolia.
-              </p>
-            </div>
+            {writeError && !writeError.message?.includes('metamask-sdk.api.cx.metamask.io') && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                <p className="text-sm font-medium">Transaction Error:</p>
+                <p className="text-sm">{writeError.message || 'Unknown error'}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

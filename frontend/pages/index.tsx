@@ -66,10 +66,10 @@ export default function Home() {
                 Bridge Shares
               </Link>
               <Link
-                href="/receive-cctp"
+                href="/receive"
                 className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
               >
-                Receive CCTP
+                Receive
               </Link>
               <Link
                 href="/deposit-rari"
