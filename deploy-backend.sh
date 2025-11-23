@@ -37,7 +37,13 @@ set -e
 cd ~/arcanefi
 
 echo "📥 Pulling latest changes..."
-git pull origin master
+# Stash any local changes and pull
+git stash || true
+git pull origin master || {
+  echo "⚠️  Git pull failed, trying to reset and pull..."
+  git fetch origin master
+  git reset --hard origin/master
+}
 
 echo "📦 Installing dependencies..."
 cd backend

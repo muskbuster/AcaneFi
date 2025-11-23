@@ -16,22 +16,10 @@ export default function Header() {
             {isConnected && (
               <nav className="hidden md:flex gap-4">
                 <Link
-                  href="/trader/register"
-                  className="px-4 py-2 text-gray-700 hover:text-primary-600 transition"
-                >
-                  Register
-                </Link>
-                <Link
                   href="/deposit"
                   className="px-4 py-2 text-gray-700 hover:text-primary-600 transition"
                 >
                   Deposit
-                </Link>
-                <Link
-                  href="/deposit-rari"
-                  className="px-4 py-2 text-gray-700 hover:text-primary-600 transition"
-                >
-                  Rari
                 </Link>
                 <Link
                   href="/receive"

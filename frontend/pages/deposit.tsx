@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, useReadContract, useBalance } from 'wagmi';
+import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, useReadContract, useBalance, usePublicClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { parseUnits, formatUnits } from 'viem';
-import { teeApi, cctpApi } from '../lib/api';
+import { teeApi, cctpApi, rariApi } from '../lib/api';
 import { sepolia, baseSepolia } from 'wagmi/chains';
 import { 
   getUnifiedVaultAddress, 
@@ -25,13 +25,23 @@ interface Trader {
   performanceFee: number;
 }
 
-type DepositStep = 'approve' | 'deposit' | 'complete' | 'attestation' | 'received';
+type DepositMethod = 'cctp' | 'rari';
+type DepositStep = 'approve' | 'deposit' | 'attestation' | 'complete' | 'received';
+
+// Rari Testnet Chain ID
+const RARI_CHAIN_ID = 1918988905;
 
 export default function Deposit() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
   const router = useRouter();
+  const publicClient = usePublicClient();
+  
+  // Deposit method selection
+  const [depositMethod, setDepositMethod] = useState<DepositMethod>('cctp');
+  
+  // Common state
   const [traders, setTraders] = useState<Trader[]>([]);
   const [selectedTrader, setSelectedTrader] = useState<number | null>(null);
   const [amount, setAmount] = useState('');
@@ -44,6 +54,10 @@ export default function Deposit() {
   const [fetchingAttestation, setFetchingAttestation] = useState(false);
   const [receiving, setReceiving] = useState(false);
   const [currentTxType, setCurrentTxType] = useState<'approve' | 'deposit' | null>(null);
+  const [depositSubmitted, setDepositSubmitted] = useState(false); // Track if deposit was actually submitted
+  
+  // Rari-specific state
+  const [nonce, setNonce] = useState<string>('');
 
   const { writeContract, data: txHash, error: writeError, isError: isWriteError, reset: resetWriteContract } = useWriteContract();
   
@@ -57,23 +71,34 @@ export default function Deposit() {
 
   const isPending = isApprovePending || isDepositPending;
 
-  // Get chain and addresses
-  const chain = chainId === baseSepolia.id ? 'base-sepolia' : 'ethereum-sepolia';
-  const usdcAddress = getUSDCAddress(chain);
-  const tokenMessengerAddress = chainId === sepolia.id ? getCCTPTokenMessengerAddress(chain) : null;
+  // Get chain and addresses based on method
+  const getCurrentChain = () => {
+    if (depositMethod === 'rari') return 'rari';
+    if (chainId === baseSepolia.id) return 'base-sepolia';
+    if (chainId === sepolia.id) return 'ethereum-sepolia';
+    return 'ethereum-sepolia';
+  };
 
-  // Check USDC balance
+  const chain = getCurrentChain();
+  const usdcAddress = depositMethod === 'rari' 
+    ? (process.env.NEXT_PUBLIC_MOCK_USDC_RARI as `0x${string}`)
+    : getUSDCAddress(chain);
+  const tokenMessengerAddress = chainId === sepolia.id && depositMethod === 'cctp' 
+    ? getCCTPTokenMessengerAddress(chain) 
+    : null;
+
+  // Check USDC balance (for CCTP)
   const { data: usdcBalance } = useBalance({
     address: address,
     token: usdcAddress,
     chainId: chainId,
     query: {
-      enabled: !!address && !!usdcAddress,
+      enabled: !!address && !!usdcAddress && depositMethod === 'cctp',
       refetchInterval: 5000,
     },
   });
 
-  // Check approval allowance (for sepolia - CCTP)
+  // Check approval allowance (for CCTP on sepolia)
   const { data: allowance } = useReadContract({
     address: usdcAddress,
     abi: USDC_ABI,
@@ -81,85 +106,169 @@ export default function Deposit() {
     args: address && tokenMessengerAddress ? [address, tokenMessengerAddress] : undefined,
     chainId: chainId,
     query: {
-      enabled: !!address && !!tokenMessengerAddress && !!usdcAddress && chainId === sepolia.id,
+      enabled: !!address && !!tokenMessengerAddress && !!usdcAddress && chainId === sepolia.id && depositMethod === 'cctp',
       refetchInterval: 5000,
     },
   });
+
+  // Generate nonce for Rari on mount
+  useEffect(() => {
+    if (depositMethod === 'rari') {
+      const timestamp = BigInt(Math.floor(Date.now() / 1000));
+      const nonceValue = (timestamp + 1000000n).toString();
+      setNonce(nonceValue);
+      console.log('📝 Generated nonce:', nonceValue);
+    }
+  }, [depositMethod]);
 
   useEffect(() => {
     loadTraders();
   }, []);
 
+  // Reset form when method changes
+  useEffect(() => {
+    setStep('approve');
+    setError('');
+    setApproveTxHash('');
+    setDepositTxHash('');
+    setAttestation(null);
+    setSelectedTrader(null);
+    setAmount('');
+    setCurrentTxType(null);
+    setDepositSubmitted(false);
+  }, [depositMethod]);
+
   // Handle write contract errors
   useEffect(() => {
     if (isWriteError && writeError) {
       console.error('Write contract error:', writeError);
-      setError(writeError.message || 'Transaction failed. Please try again.');
+      const errorMessage = writeError.message || '';
+      if (!errorMessage.includes('metamask-sdk.api.cx.metamask.io')) {
+        setError(writeError.message || 'Transaction failed. Please try again.');
+      }
       setLoading(false);
       setCurrentTxType(null);
-      // Reset the write contract state after a delay
-      setTimeout(() => {
-        resetWriteContract();
-      }, 3000);
     }
-  }, [isWriteError, writeError, resetWriteContract]);
+  }, [isWriteError, writeError]);
 
-  // Track transaction hash based on current transaction type
+  // Handle approval success
   useEffect(() => {
-    if (txHash && currentTxType) {
+    if (isApproveSuccess && step === 'approve') {
+      setStep('deposit');
+      setLoading(false);
+      // Clear any previous deposit state when approval succeeds (new flow starting)
+      setDepositTxHash('');
+      setDepositSubmitted(false);
+    }
+  }, [isApproveSuccess, step]);
+
+  // Track transaction hashes based on current transaction type
+  useEffect(() => {
+    if (txHash) {
       if (currentTxType === 'approve') {
         setApproveTxHash(txHash);
-        setCurrentTxType(null); // Reset after capturing
+        console.log('✅ Approval transaction hash:', txHash);
+        // Clear deposit hash when approval is submitted (new flow starting)
+        setDepositTxHash('');
+        setDepositSubmitted(false);
       } else if (currentTxType === 'deposit') {
         setDepositTxHash(txHash);
-        setCurrentTxType(null); // Reset after capturing
+        setDepositSubmitted(true); // Mark that deposit was actually submitted
+        console.log('✅ Deposit transaction hash:', txHash);
+        // Reset currentTxType after setting hash
+        setCurrentTxType(null);
       }
     }
   }, [txHash, currentTxType]);
 
-  // Handle approval success
+  // Handle deposit success - CCTP flow
+  // Only proceed if deposit was actually submitted and confirmed
   useEffect(() => {
-    if (isApproveSuccess && approveTxHash) {
-      setStep('deposit');
+    if (depositMethod === 'cctp' && isDepositSuccess && step === 'deposit' && depositTxHash && depositSubmitted) {
+      console.log('✅ CCTP Deposit transaction confirmed:', depositTxHash);
+      console.log('📋 Deposit was actually submitted and confirmed');
       setLoading(false);
-    }
-  }, [isApproveSuccess, approveTxHash]);
-
-  // Handle deposit/burn success - only fetch attestation after deposit succeeds
-  useEffect(() => {
-    if (isDepositSuccess && depositTxHash) {
-      setLoading(false);
-      if (chainId === sepolia.id) {
-        // CCTP deposit - store in backend and fetch attestation after burn transaction
-        if (address) {
-          cctpApi.storeDeposit({
-            userAddress: address,
-            transactionHash: depositTxHash,
-            sourceDomain: 0, // Ethereum Sepolia
-            sourceChainId: sepolia.id,
-            sourceChainName: 'Ethereum Sepolia',
-          }).then(() => {
-            console.log('✅ CCTP deposit stored in backend');
-          }).catch((err) => {
-            console.error('Failed to store CCTP deposit:', err);
-            // Don't block the flow if storage fails
-          });
-        }
-        setStep('attestation');
+      
+      // Store CCTP deposit in backend
+      if (address && depositTxHash && amount) {
+        const depositAmount = parseUnits(amount, 6);
+        const sourceDomain = chainId === sepolia.id ? 0 : 6; // Ethereum Sepolia = 0, Base Sepolia = 6
+        
+        cctpApi.storeDeposit({
+          userAddress: address,
+          transactionHash: depositTxHash,
+          sourceDomain: sourceDomain,
+          sourceChainId: chainId,
+          sourceChainName: chainId === sepolia.id ? 'Ethereum Sepolia' : 'Base Sepolia',
+        }).then(() => {
+          console.log('✅ CCTP deposit stored in backend');
+          setStep('attestation');
+        }).catch((err) => {
+          console.error('Failed to store CCTP deposit:', err);
+          setStep('attestation');
+        });
       } else {
-        // Direct deposit on Base Sepolia
-        setStep('complete');
+        console.warn('⚠️  Missing data for CCTP deposit storage, but moving to attestation');
+        setStep('attestation');
       }
     }
-  }, [isDepositSuccess, depositTxHash, chainId, address]);
+  }, [isDepositSuccess, step, depositTxHash, address, amount, depositMethod, chainId, depositSubmitted]);
 
-  // Fetch attestation when step changes to 'attestation' and we have a deposit tx hash
+  // Handle deposit success - Rari flow
+  // Only proceed if deposit was actually submitted and confirmed
   useEffect(() => {
-    if (step === 'attestation' && depositTxHash && !attestation && !fetchingAttestation) {
-      fetchAttestation();
+    if (depositMethod === 'rari' && isDepositSuccess && step === 'deposit' && depositTxHash && depositSubmitted) {
+      console.log('✅ Rari Deposit transaction confirmed:', depositTxHash);
+      console.log('📋 Deposit was actually submitted and confirmed');
+      console.log('📋 Current state:', { nonce, amount, address });
+      setLoading(false);
+      
+      // Ensure nonce is set
+      let finalNonce = nonce;
+      if (!finalNonce || finalNonce === '') {
+        const timestamp = BigInt(Math.floor(Date.now() / 1000));
+        finalNonce = (timestamp + 1000000n).toString();
+        setNonce(finalNonce);
+        console.log('📝 Generated nonce on-the-fly:', finalNonce);
+      }
+      
+      if (!amount || amount === '') {
+        console.error('⚠️  Amount is missing');
+        setError('Amount is missing. Please refresh and try again.');
+        setLoading(false);
+        return;
+      }
+      
+      // Store Rari deposit in backend
+      if (address && depositTxHash && finalNonce && amount) {
+        const depositAmount = parseUnits(amount, 6);
+        rariApi.storeDeposit({
+          userAddress: address,
+          amount: depositAmount.toString(),
+          amountFormatted: amount,
+          nonce: finalNonce,
+          sourceChainId: RARI_CHAIN_ID.toString(),
+          depositTxHash,
+        }).then(() => {
+          console.log('✅ Rari deposit stored in backend');
+          setStep('attestation');
+          setTimeout(() => {
+            fetchAttestation();
+          }, 100);
+        }).catch((err) => {
+          console.error('Failed to store Rari deposit:', err);
+          setStep('attestation');
+          setTimeout(() => {
+            fetchAttestation();
+          }, 100);
+        });
+      } else {
+        console.error('⚠️  Missing required data for deposit storage');
+        setError('Missing required data. Please refresh and try again.');
+        setLoading(false);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, depositTxHash]);
+  }, [isDepositSuccess, step, depositTxHash, address, nonce, amount, depositMethod, depositSubmitted]);
 
   const loadTraders = async () => {
     try {
@@ -170,58 +279,86 @@ export default function Deposit() {
     }
   };
 
-  const getCurrentChain = () => {
-    if (chainId === baseSepolia.id) return 'base-sepolia';
-    if (chainId === sepolia.id) return 'ethereum-sepolia';
-    return 'ethereum-sepolia';
-  };
-
   const handleApprove = async () => {
     if (!isConnected || !address || !selectedTrader || !amount) {
       setError('Please fill in all fields');
       return;
     }
 
-    // Check balance first
-    if (!usdcBalance || usdcBalance.value < parseUnits(amount, 6)) {
+    // Validate amount
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setError('Amount must be greater than 0');
+      return;
+    }
+
+    // Check balance for CCTP
+    if (depositMethod === 'cctp' && (!usdcBalance || usdcBalance.value < parseUnits(amount, 6))) {
       setError(`Insufficient USDC balance. You have ${usdcBalance ? formatUnits(usdcBalance.value, 6) : '0'} USDC, but need ${amount} USDC.`);
       return;
     }
 
-    // Reset any previous errors
+    // Check chain for Rari
+    if (depositMethod === 'rari' && chainId !== RARI_CHAIN_ID) {
+      setError(`Please switch to Rari Testnet (Chain ID: ${RARI_CHAIN_ID})`);
+      try {
+        switchChain?.({ chainId: RARI_CHAIN_ID });
+      } catch (switchErr) {
+        console.error('Failed to switch chain:', switchErr);
+      }
+      return;
+    }
+
+    // Check chain for CCTP
+    if (depositMethod === 'cctp' && chainId !== sepolia.id && chainId !== baseSepolia.id) {
+      setError('Please switch to Ethereum Sepolia or Base Sepolia');
+      try {
+        switchChain?.({ chainId: sepolia.id });
+      } catch (switchErr) {
+        console.error('Failed to switch chain:', switchErr);
+      }
+      return;
+    }
+
     setError('');
     setLoading(true);
-    resetWriteContract(); // Reset write contract state
+    resetWriteContract();
 
     try {
-      const chain = getCurrentChain();
-      const usdcAddress = getUSDCAddress(chain);
       const depositAmount = parseUnits(amount, 6);
-
-      // For CCTP deposits, approve TokenMessenger; for direct deposits, approve UnifiedVault
       let spenderAddress: `0x${string}`;
-      if (chainId === sepolia.id) {
-        // CCTP deposit - approve TokenMessenger
-        spenderAddress = getCCTPTokenMessengerAddress(chain);
-      } else {
-        // Direct deposit - approve UnifiedVault
-        const vaultAddress = await getUnifiedVaultAddress(chain);
+
+      if (depositMethod === 'rari') {
+        const vaultAddress = await getUnifiedVaultAddress('rari');
         if (!vaultAddress || vaultAddress === '0x0000000000000000000000000000000000000000') {
-          setError('UnifiedVault not deployed on this chain');
+          setError('UnifiedVault not deployed on Rari');
           setLoading(false);
           return;
         }
         spenderAddress = vaultAddress;
+      } else {
+        // CCTP flow
+        if (chainId === sepolia.id) {
+          spenderAddress = getCCTPTokenMessengerAddress(chain);
+        } else {
+          const vaultAddress = await getUnifiedVaultAddress(chain);
+          if (!vaultAddress || vaultAddress === '0x0000000000000000000000000000000000000000') {
+            setError('UnifiedVault not deployed on this chain');
+            setLoading(false);
+            return;
+          }
+          spenderAddress = vaultAddress;
+        }
       }
 
-      console.log('📝 Approving USDC:', {
+      console.log('📝 Approving:', {
+        method: depositMethod,
         token: usdcAddress,
         spender: spenderAddress,
         amount: depositAmount.toString(),
-        amountFormatted: amount,
       });
 
-      setCurrentTxType('approve'); // Mark that we're submitting an approval
+      setCurrentTxType('approve');
       try {
         writeContract({
           address: usdcAddress,
@@ -247,130 +384,172 @@ export default function Deposit() {
       return;
     }
 
-    // Check balance
-    const depositAmount = parseUnits(amount, 6);
-    if (!usdcBalance || usdcBalance.value < depositAmount) {
-      setError(`Insufficient USDC balance. You have ${usdcBalance ? formatUnits(usdcBalance.value, 6) : '0'} USDC, but need ${amount} USDC.`);
+    // Validate amount
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setError('Amount must be greater than 0');
       return;
     }
 
-    // Check approval for sepolia (CCTP) - following test pattern
-    if (chainId === sepolia.id) {
-      if (!allowance || allowance < depositAmount) {
-        setError(`Insufficient approval for TokenMessenger. Please approve USDC first. Current allowance: ${allowance ? formatUnits(allowance, 6) : '0'} USDC, needed: ${amount} USDC`);
+    // Check balance for CCTP
+    if (depositMethod === 'cctp') {
+      const depositAmount = parseUnits(amount, 6);
+      if (!usdcBalance || usdcBalance.value < depositAmount) {
+        setError(`Insufficient USDC balance. You have ${usdcBalance ? formatUnits(usdcBalance.value, 6) : '0'} USDC, but need ${amount} USDC.`);
         return;
       }
-      console.log('✅ TokenMessenger approval verified:', {
-        allowance: formatUnits(allowance, 6),
-        needed: amount,
-        sufficient: allowance >= depositAmount,
-      });
+
+      // Check approval for sepolia (CCTP)
+      if (chainId === sepolia.id) {
+        if (!allowance || allowance < depositAmount) {
+          setError(`Insufficient approval. Please approve USDC first.`);
+          return;
+        }
+      }
     }
 
-    // Reset any previous errors
+    // Check chain for Rari
+    if (depositMethod === 'rari') {
+      if (chainId !== RARI_CHAIN_ID) {
+        setError(`Please switch to Rari Testnet (Chain ID: ${RARI_CHAIN_ID})`);
+        try {
+          switchChain?.({ chainId: RARI_CHAIN_ID });
+        } catch (switchErr) {
+          console.error('Failed to switch chain:', switchErr);
+        }
+        return;
+      }
+
+      if (step !== 'deposit') {
+        setError('Please complete the approval step first');
+        return;
+      }
+
+      // Check allowance for Rari
+      if (publicClient && address) {
+        try {
+          const vaultAddress = await getUnifiedVaultAddress('rari');
+          const usdcAddress = process.env.NEXT_PUBLIC_MOCK_USDC_RARI as `0x${string}`;
+          if (vaultAddress && usdcAddress) {
+            const allowance = await publicClient.readContract({
+              address: usdcAddress,
+              abi: USDC_ABI,
+              functionName: 'allowance',
+              args: [address, vaultAddress],
+            });
+            const depositAmount = parseUnits(amount, 6);
+            if (allowance < depositAmount) {
+              setError(`Insufficient allowance. Please approve first.`);
+              return;
+            }
+          }
+        } catch (allowanceErr) {
+          console.warn('Could not check allowance:', allowanceErr);
+        }
+      }
+    }
+
     setError('');
     setLoading(true);
-    resetWriteContract(); // Reset write contract state
+    resetWriteContract();
 
     try {
-      const chain = getCurrentChain();
-      
-      // Trader validation is done on-chain - no need to call backend
-      // The trader list already comes from on-chain, so if it's in the list, it's valid
+      const depositAmount = parseUnits(amount, 6);
 
-      const maxFee = parseUnits('0.1', 6);
-      const minFinalityThreshold = 1000; // Fast transfer
-
-      console.log('📝 Depositing USDC:', {
-        chain: chain,
-        chainId: chainId,
-        traderId: selectedTrader,
-        amount: depositAmount.toString(),
-        amountFormatted: amount,
-      });
-
-      if (chainId === sepolia.id) {
-        // CCTP deposit from Ethereum Sepolia - call TokenMessenger directly
-        const usdcAddress = getUSDCAddress(chain);
-        const tokenMessengerAddress = getCCTPTokenMessengerAddress(chain);
-        const BASE_SEPOLIA_DOMAIN = 6;
-        
-        // Get TEE wallet address from environment
-        const teeWallet = (process.env.NEXT_PUBLIC_TEE_WALLET_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`;
-        if (teeWallet === '0x0000000000000000000000000000000000000000') {
-          setError('TEE wallet address not configured');
-          setLoading(false);
-          return;
-        }
-        const mintRecipient = addressToBytes32(teeWallet as `0x${string}`);
-        const destinationCaller = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
-
-        // Approve TokenMessenger if needed
-        const usdcContract = {
-          address: usdcAddress,
-          abi: USDC_ABI,
-        };
-        
-        // Following test pattern: Call TokenMessenger.depositForBurn directly
-        console.log('\n📤 Calling TokenMessenger.depositForBurn (following test pattern):');
-        console.log('   Amount:', formatUnits(depositAmount, 6), 'USDC');
-        console.log('   Destination Domain:', BASE_SEPOLIA_DOMAIN, '(Base Sepolia)');
-        console.log('   Mint Recipient (TEE):', teeWallet);
-        console.log('   Mint Recipient (bytes32):', mintRecipient);
-        console.log('   Burn Token:', usdcAddress);
-        console.log('   Max Fee:', formatUnits(maxFee, 6), 'USDC');
-        console.log('   Min Finality Threshold:', minFinalityThreshold);
-        
-        setCurrentTxType('deposit'); // Mark that we're submitting a deposit/burn
-        try {
-          writeContract({
-            address: tokenMessengerAddress,
-            abi: CCTP_TOKEN_MESSENGER_ABI,
-            functionName: 'depositForBurn',
-            args: [
-              depositAmount,
-              BASE_SEPOLIA_DOMAIN,
-              mintRecipient,
-              usdcAddress,
-              destinationCaller,
-              maxFee,
-              minFinalityThreshold,
-            ],
-          });
-          console.log('✅ Transaction submitted to wallet');
-        } catch (writeErr: any) {
-          console.error('❌ Write contract error:', writeErr);
-          console.error('   Error details:', {
-            message: writeErr.message,
-            reason: writeErr.reason,
-            data: writeErr.data,
-            code: writeErr.code,
-          });
-          setError(writeErr.message || writeErr.reason || 'Failed to submit deposit transaction');
-          setLoading(false);
-        }
-      } else if (chainId === baseSepolia.id) {
-        // Direct deposit on Base Sepolia - deposit directly to UnifiedVault
-        const vaultAddress = await getUnifiedVaultAddress(chain);
+      if (depositMethod === 'rari') {
+        // Rari deposit flow
+        const vaultAddress = await getUnifiedVaultAddress('rari');
         if (!vaultAddress || vaultAddress === '0x0000000000000000000000000000000000000000') {
-          setError('UnifiedVault not deployed on this chain');
+          setError('UnifiedVault not deployed on Rari');
           setLoading(false);
           return;
         }
 
-        // Direct deposit on Base Sepolia - no bridging needed
-        setCurrentTxType('deposit'); // Mark that we're submitting a deposit
+        console.log('📝 Depositing MockUSDC on Rari:', {
+          traderId: selectedTrader,
+          amount: depositAmount.toString(),
+          vault: vaultAddress,
+        });
+
+        setCurrentTxType('deposit');
         try {
           writeContract({
             address: vaultAddress,
             abi: UNIFIED_VAULT_ABI,
-            functionName: 'depositViaCCTP',
-            args: [BigInt(selectedTrader), depositAmount, maxFee, minFinalityThreshold],
+            functionName: 'depositRari',
+            args: [BigInt(selectedTrader), depositAmount],
           });
         } catch (writeErr: any) {
           console.error('Write contract error:', writeErr);
-          setError(writeErr.message || 'Failed to submit deposit transaction');
+          if (!writeErr.message?.includes('metamask-sdk.api.cx.metamask.io')) {
+            setError(writeErr.message || 'Failed to submit deposit transaction');
+          }
           setLoading(false);
+        }
+      } else {
+        // CCTP deposit flow
+        if (chainId === sepolia.id) {
+          // CCTP deposit from Ethereum Sepolia
+          const tokenMessengerAddress = getCCTPTokenMessengerAddress(chain);
+          const BASE_SEPOLIA_DOMAIN = 6;
+          const teeWallet = (process.env.NEXT_PUBLIC_TEE_WALLET_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`;
+          if (teeWallet === '0x0000000000000000000000000000000000000000') {
+            setError('TEE wallet address not configured');
+            setLoading(false);
+            return;
+          }
+          const mintRecipient = addressToBytes32(teeWallet);
+          const destinationCaller = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
+          const maxFee = parseUnits('0.1', 6);
+          const minFinalityThreshold = 1000;
+
+          console.log('📤 Calling TokenMessenger.depositForBurn');
+          setCurrentTxType('deposit');
+          try {
+            writeContract({
+              address: tokenMessengerAddress,
+              abi: CCTP_TOKEN_MESSENGER_ABI,
+              functionName: 'depositForBurn',
+              args: [
+                depositAmount,
+                BASE_SEPOLIA_DOMAIN,
+                mintRecipient,
+                usdcAddress,
+                destinationCaller,
+                maxFee,
+                minFinalityThreshold,
+              ],
+            });
+          } catch (writeErr: any) {
+            console.error('Write contract error:', writeErr);
+            setError(writeErr.message || 'Failed to submit deposit transaction');
+            setLoading(false);
+          }
+        } else if (chainId === baseSepolia.id) {
+          // Direct deposit on Base Sepolia
+          const vaultAddress = await getUnifiedVaultAddress(chain);
+          if (!vaultAddress || vaultAddress === '0x0000000000000000000000000000000000000000') {
+            setError('UnifiedVault not deployed on this chain');
+            setLoading(false);
+            return;
+          }
+
+          const maxFee = parseUnits('0.1', 6);
+          const minFinalityThreshold = 1000;
+
+          setCurrentTxType('deposit');
+          try {
+            writeContract({
+              address: vaultAddress,
+              abi: UNIFIED_VAULT_ABI,
+              functionName: 'depositViaCCTP',
+              args: [BigInt(selectedTrader), depositAmount, maxFee, minFinalityThreshold],
+            });
+          } catch (writeErr: any) {
+            console.error('Write contract error:', writeErr);
+            setError(writeErr.message || 'Failed to submit deposit transaction');
+            setLoading(false);
+          }
         }
       }
     } catch (err: any) {
@@ -381,93 +560,67 @@ export default function Deposit() {
   };
 
   const fetchAttestation = async () => {
-    if (!depositTxHash) return;
+    if (depositMethod === 'cctp') {
+      // CCTP attestation flow
+      if (!depositTxHash) return;
 
-    setFetchingAttestation(true);
-    setError('');
+      setFetchingAttestation(true);
+      setError('');
 
-    try {
-      const ETHEREUM_SEPOLIA_DOMAIN = 0;
-      const result = await cctpApi.pollAttestation(
-        ETHEREUM_SEPOLIA_DOMAIN,
-        depositTxHash,
-        60, // max attempts (5 minutes)
-        5000 // 5 second intervals
-      );
+      try {
+        const ETHEREUM_SEPOLIA_DOMAIN = 0;
+        const result = await cctpApi.pollAttestation(
+          ETHEREUM_SEPOLIA_DOMAIN,
+          depositTxHash,
+          60,
+          5000
+        );
 
-      setAttestation(result);
-      setStep('complete');
-    } catch (err: any) {
-      console.error('Attestation error:', err);
-      setError(err.message || 'Failed to fetch attestation. You can try again later.');
-    } finally {
-      setFetchingAttestation(false);
-    }
-  };
-
-  const handleReceiveUSDC = async () => {
-    if (!attestation || !address) {
-      setError('Please wait for attestation');
-      return;
-    }
-
-    if (chainId !== baseSepolia.id) {
-      setError('Please switch to Base Sepolia to receive USDC');
-      return;
-    }
-
-    // Validate attestation structure
-    if (!attestation.message || !attestation.attestation) {
-      setError('Invalid attestation data. Please fetch attestation again.');
-      console.error('Invalid attestation structure:', attestation);
-      return;
-    }
-
-    // Validate hex strings
-    if (typeof attestation.message !== 'string' || typeof attestation.attestation !== 'string') {
-      setError('Attestation message and attestation must be strings');
-      return;
-    }
-
-    if (!attestation.message.startsWith('0x') || !attestation.attestation.startsWith('0x')) {
-      setError('Attestation message and attestation must be hex strings starting with 0x');
-      return;
-    }
-
-    setReceiving(true);
-    setError('');
-
-    try {
-      console.log('📤 Receiving USDC with attestation:', {
-        message: attestation.message.substring(0, 30) + '...',
-        attestation: attestation.attestation.substring(0, 30) + '...',
-        messageLength: attestation.message.length,
-        attestationLength: attestation.attestation.length,
-      });
-
-      const result = await cctpApi.receiveBridgedUSDC(
-        attestation.message,
-        attestation.attestation
-      );
-
-      console.log('✅ Receive result:', result);
-
-      if (result.success) {
-        setStep('received');
-        alert(`USDC received successfully! Transaction: ${result.transactionHash}`);
-      } else {
-        setError(result.error || 'Failed to receive USDC');
+        setAttestation(result);
+        setStep('complete');
+      } catch (err: any) {
+        console.error('Attestation error:', err);
+        setError(err.message || 'Failed to fetch attestation. You can try again later.');
+      } finally {
+        setFetchingAttestation(false);
       }
-    } catch (err: any) {
-      console.error('❌ Receive error:', err);
-      console.error('Error details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-      });
-      setError(err.message || 'Failed to receive USDC');
-    } finally {
-      setReceiving(false);
+    } else {
+      // Rari attestation flow
+      let finalNonce = nonce;
+      if (!finalNonce || finalNonce === '') {
+        const timestamp = BigInt(Math.floor(Date.now() / 1000));
+        finalNonce = (timestamp + 1000000n).toString();
+        setNonce(finalNonce);
+        console.log('📝 Generated nonce in fetchAttestation:', finalNonce);
+      }
+      
+      if (!amount || !finalNonce) {
+        setError('Missing required data. Please ensure deposit completed successfully.');
+        setFetchingAttestation(false);
+        return;
+      }
+
+      setFetchingAttestation(true);
+      setError('');
+
+      try {
+        const depositAmount = parseUnits(amount, 6);
+        const amountInWei = depositAmount.toString();
+        
+        const result = await rariApi.getAttestation(amountInWei, finalNonce);
+
+        if (result.success && result.attestation) {
+          setAttestation(result.attestation);
+          setStep('complete');
+        } else {
+          setError(result.error || 'Failed to get attestation');
+        }
+      } catch (err: any) {
+        console.error('Attestation error:', err);
+        setError(err.response?.data?.error || err.message || 'Failed to fetch attestation');
+      } finally {
+        setFetchingAttestation(false);
+      }
     }
   };
 
@@ -495,85 +648,184 @@ export default function Deposit() {
             </div>
           )}
 
-          {step === 'attestation' && (
-            <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
-              <p className="font-bold">⏳ Waiting for CCTP attestation...</p>
-              {depositTxHash && (
-                <p className="mt-2 text-sm">
-                  Transaction: <a href={`https://sepolia.etherscan.io/tx/${depositTxHash}`} target="_blank" rel="noopener noreferrer" className="underline">{depositTxHash.substring(0, 20)}...</a>
-                </p>
-              )}
-              {fetchingAttestation && (
-                <p className="mt-2 text-sm">Fetching attestation from Circle API...</p>
-              )}
-            </div>
-          )}
+          {/* Deposit Method Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Deposit Method
+            </label>
+            <select
+              value={depositMethod}
+              onChange={(e) => setDepositMethod(e.target.value as DepositMethod)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={step !== 'approve'}
+            >
+              <option value="cctp">CCTP (Ethereum Sepolia → Base Sepolia)</option>
+              <option value="rari">Rari (Rari Testnet → Base Sepolia)</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {depositMethod === 'cctp' 
+                ? 'Uses Circle CCTP for cross-chain USDC transfer'
+                : 'Uses custom attestation flow for chains without CCTP'}
+            </p>
+          </div>
 
-          {step === 'complete' && attestation && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
-              <p className="font-bold">✅ Attestation received!</p>
-              {chainId === baseSepolia.id ? (
-                <div className="mt-2">
-                  <p className="text-sm mb-2">Ready to receive USDC on Base Sepolia</p>
+          {/* Chain Status */}
+          {depositMethod === 'cctp' && (
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-blue-800 mb-2">
+                Current Chain: <span className="font-bold">
+                  {chainId === sepolia.id ? 'Ethereum Sepolia ✅' : chainId === baseSepolia.id ? 'Base Sepolia ✅' : `Chain ID ${chainId} (Switch to Ethereum Sepolia or Base Sepolia)`}
+                </span>
+              </p>
+              <div className="flex gap-2">
+                {chainId !== sepolia.id && (
                   <button
-                    onClick={handleReceiveUSDC}
-                    disabled={receiving}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                    onClick={() => switchChain?.({ chainId: sepolia.id })}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+                    disabled={loading}
                   >
-                    {receiving ? 'Receiving...' : 'Receive USDC'}
+                    Switch to Ethereum Sepolia
                   </button>
-                </div>
-              ) : (
-                <p className="mt-2 text-sm">
-                  Switch to Base Sepolia to receive USDC, or go to{' '}
-                  <Link href="/receive" className="underline">Receive</Link> page
-                </p>
-              )}
-            </div>
-          )}
-
-          {step === 'received' && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
-              <p className="font-bold">✅ USDC received successfully on Base Sepolia!</p>
-              <p className="mt-2 text-sm">Your deposit has been completed.</p>
-            </div>
-          )}
-
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Chain
-              </label>
-              <div className="flex gap-4">
-                <button
-                  type="button"
-                  onClick={() => switchChain?.({ chainId: sepolia.id })}
-                  className={`px-4 py-2 rounded-lg ${
-                    chainId === sepolia.id
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  Ethereum Sepolia
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchChain?.({ chainId: baseSepolia.id })}
-                  className={`px-4 py-2 rounded-lg ${
-                    chainId === baseSepolia.id
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  Base Sepolia
-                </button>
+                )}
+                {chainId !== baseSepolia.id && (
+                  <button
+                    onClick={() => switchChain?.({ chainId: baseSepolia.id })}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+                    disabled={loading}
+                  >
+                    Switch to Base Sepolia
+                  </button>
+                )}
               </div>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-xs text-blue-700 mt-2">
                 {chainId === sepolia.id && 'Deposit via CCTP → Base Sepolia'}
                 {chainId === baseSepolia.id && 'Direct deposit on Base Sepolia'}
               </p>
             </div>
+          )}
 
+          {depositMethod === 'rari' && (
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-blue-800 mb-2">
+                Current Chain: <span className="font-bold">
+                  {chainId === RARI_CHAIN_ID ? 'Rari Testnet ✅' : `Chain ID ${chainId} (Switch to Rari Testnet)`}
+                </span>
+              </p>
+              {chainId !== RARI_CHAIN_ID && (
+                <button
+                  onClick={() => switchChain?.({ chainId: RARI_CHAIN_ID })}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+                  disabled={loading}
+                >
+                  Switch to Rari Testnet
+                </button>
+              )}
+              {chainId === RARI_CHAIN_ID && (
+                <p className="text-sm text-green-700 mt-2">✅ Connected to Rari Testnet - Ready to deposit</p>
+              )}
+            </div>
+          )}
+
+          {/* Attestation Status */}
+          {step === 'attestation' && (
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
+              <p className="font-bold">
+                {depositMethod === 'cctp' ? '⏳ Waiting for CCTP attestation...' : '⏳ Getting Rari attestation...'}
+              </p>
+              {depositTxHash && (
+                <p className="mt-2 text-sm">
+                  Transaction: <a 
+                    href={depositMethod === 'rari' 
+                      ? `https://rari-testnet.calderachain.xyz/tx/${depositTxHash}`
+                      : `https://sepolia.etherscan.io/tx/${depositTxHash}`}
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="underline"
+                  >
+                    {depositTxHash.substring(0, 20)}...
+                  </a>
+                </p>
+              )}
+              {depositMethod === 'rari' && nonce && (
+                <div className="mt-2 p-2 bg-white border border-yellow-300 rounded">
+                  <p className="text-xs font-semibold text-gray-700 mb-1">Save this nonce for receiving on Base Sepolia:</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono break-all">{nonce}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(nonce);
+                        alert('Nonce copied to clipboard!');
+                      }}
+                      className="ml-2 px-2 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
+              {fetchingAttestation && (
+                <p className="mt-2 text-sm">
+                  {depositMethod === 'cctp' ? 'Fetching attestation from Circle API...' : 'Fetching attestation from TEE API...'}
+                </p>
+              )}
+              {depositMethod === 'rari' && !fetchingAttestation && (
+                <button
+                  onClick={fetchAttestation}
+                  disabled={!depositTxHash || !nonce}
+                  className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50 text-sm"
+                >
+                  Fetch Attestation
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Complete Status */}
+          {step === 'complete' && attestation && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
+              <p className="font-bold">✅ Attestation received!</p>
+              <div className="mt-2 space-y-2">
+                <p className="text-sm mb-2">Ready to receive USDC on Base Sepolia</p>
+                {depositMethod === 'rari' && nonce && (
+                  <div className="bg-white border border-green-300 rounded p-3 mb-2">
+                    <p className="text-xs font-semibold text-gray-700 mb-1">Save this information for receiving:</p>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Amount:</span>
+                        <span className="text-xs font-mono font-bold">{amount} USDC</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Nonce:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold break-all">{nonce}</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(nonce);
+                              alert('Nonce copied to clipboard!');
+                            }}
+                            className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Link
+                    href="/receive"
+                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    Go to Receive Page
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-6">
+            {/* Trader Selection */}
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-medium text-gray-700">
@@ -592,7 +844,7 @@ export default function Deposit() {
                 required
                 value={selectedTrader || ''}
                 onChange={(e) => setSelectedTrader(parseInt(e.target.value))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={step !== 'approve'}
               >
                 <option value="">-- Select a trader --</option>
@@ -606,16 +858,12 @@ export default function Deposit() {
                   ))
                 )}
               </select>
-              {traders.length > 0 && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {traders.length} trader{traders.length !== 1 ? 's' : ''} available
-                </p>
-              )}
             </div>
 
+            {/* Amount Input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Amount (USDC)
+                Amount ({depositMethod === 'rari' ? 'MockUSDC' : 'USDC'})
               </label>
               <input
                 type="number"
@@ -624,38 +872,49 @@ export default function Deposit() {
                 step="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="0.00"
                 disabled={step !== 'approve'}
               />
+              {depositMethod === 'cctp' && usdcBalance && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Balance: {formatUnits(usdcBalance.value, 6)} USDC
+                </p>
+              )}
             </div>
 
+            {/* Action Buttons */}
             {step === 'approve' && (
               <button
                 onClick={handleApprove}
-                disabled={loading || isPending || !selectedTrader || !amount}
+                disabled={loading || isPending || !selectedTrader || !amount || 
+                  (depositMethod === 'cctp' && chainId !== sepolia.id && chainId !== baseSepolia.id) ||
+                  (depositMethod === 'rari' && chainId !== RARI_CHAIN_ID)}
                 className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
               >
-                {loading || isPending ? 'Approving...' : '1. Approve USDC'}
+                {loading || isPending ? 'Approving...' : `1. Approve ${depositMethod === 'rari' ? 'MockUSDC' : 'USDC'}`}
               </button>
             )}
 
             {step === 'deposit' && (
               <>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-green-800">✅ USDC Approved</p>
+                  <p className="text-sm text-green-800">✅ {depositMethod === 'rari' ? 'MockUSDC' : 'USDC'} Approved</p>
                 </div>
                 <button
                   onClick={handleDeposit}
                   disabled={loading || isPending}
                   className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
                 >
-                  {loading || isPending ? 'Processing...' : chainId === sepolia.id ? '2. Deposit via CCTP' : '2. Deposit USDC'}
+                  {loading || isPending ? 'Processing...' : 
+                    depositMethod === 'cctp' 
+                      ? (chainId === sepolia.id ? '2. Deposit via CCTP' : '2. Deposit USDC')
+                      : '2. Deposit MockUSDC on Rari'}
                 </button>
               </>
             )}
 
-            {step === 'attestation' && !fetchingAttestation && (
+            {step === 'attestation' && depositMethod === 'cctp' && !fetchingAttestation && (
               <button
                 onClick={fetchAttestation}
                 disabled={!depositTxHash}
@@ -665,17 +924,22 @@ export default function Deposit() {
               </button>
             )}
 
+            {/* Info Box */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800">
                 <strong>Note:</strong>
-                {chainId === sepolia.id && (
-                  <>
-                    {' '}Deposits from Ethereum Sepolia use CCTP. After deposit, go to{' '}
-                    <Link href="/receive" className="underline">Receive</Link> page.
+                {depositMethod === 'cctp' && chainId === sepolia.id && (
+                  <> Deposits from Ethereum Sepolia use CCTP. After deposit, go to{' '}
+                    <Link href="/receive" className="underline">Receive</Link> page to complete the flow.
                   </>
                 )}
-                {chainId === baseSepolia.id && (
+                {depositMethod === 'cctp' && chainId === baseSepolia.id && (
                   <> Direct deposits on Base Sepolia. You'll receive OFT vault shares.</>
+                )}
+                {depositMethod === 'rari' && (
+                  <> Rari deposits use custom attestation. After deposit, get attestation and go to{' '}
+                    <Link href="/receive" className="underline">Receive</Link> page to complete the flow.
+                  </>
                 )}
               </p>
             </div>

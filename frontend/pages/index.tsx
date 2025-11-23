@@ -18,15 +18,27 @@ export default function Home() {
   const { address, isConnected } = useAccount();
   const [traders, setTraders] = useState<Trader[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userTrader, setUserTrader] = useState<Trader | null>(null);
 
   useEffect(() => {
     loadTraders();
-  }, []);
+  }, [address]);
 
   const loadTraders = async () => {
     try {
       const response = await teeApi.getAllTraders();
-      setTraders(response.traders || []);
+      const allTraders = response.traders || [];
+      setTraders(allTraders);
+      
+      // Check if connected wallet is a registered trader
+      if (address && allTraders.length > 0) {
+        const trader = allTraders.find(
+          (t: Trader) => t.address.toLowerCase() === address.toLowerCase()
+        );
+        setUserTrader(trader || null);
+      } else {
+        setUserTrader(null);
+      }
     } catch (error) {
       console.error('Failed to load traders:', error);
     } finally {
@@ -47,12 +59,21 @@ export default function Home() {
           </p>
           {isConnected && (
             <div className="flex justify-center gap-4 flex-wrap">
-              <Link
-                href="/trader/register"
-                className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-              >
-                Register as Trader
-              </Link>
+              {userTrader ? (
+                <Link
+                  href={`/trader/${userTrader.traderId}`}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                >
+                  🎯 My Trader Dashboard
+                </Link>
+              ) : (
+                <Link
+                  href="/trader/register"
+                  className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                >
+                  Register as Trader
+                </Link>
+              )}
               <Link
                 href="/deposit"
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -70,12 +91,6 @@ export default function Home() {
                 className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
               >
                 Receive
-              </Link>
-              <Link
-                href="/deposit-rari"
-                className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition"
-              >
-                Deposit via Rari
               </Link>
             </div>
           )}
