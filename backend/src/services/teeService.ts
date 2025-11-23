@@ -697,6 +697,7 @@ export class TEEService {
     return {
       verified: true,
       deposit,
+      transactionHash,
       message: 'Rari deposit verified and received successfully on-chain',
     };
   }

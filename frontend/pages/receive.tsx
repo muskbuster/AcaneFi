@@ -283,12 +283,21 @@ export default function Receive() {
         );
 
         if (result.success) {
+          const txHash = result.transactionHash;
+          
+          if (!txHash) {
+            console.warn('Transaction hash not found in result:', result);
+            setError('Transaction completed but hash not available');
+            setReceiving(false);
+            return;
+          }
+
           // Delete deposit from storage after successful receive
           if (selectedDeposit && 'transactionHash' in selectedDeposit) {
             try {
               await cctpApi.markAsRedeemed({
                 id: selectedDeposit.id,
-                redeemTxHash: result.transactionHash,
+                redeemTxHash: txHash,
               });
               // Reload deposits list
               await loadCCTPDeposits();
@@ -301,7 +310,7 @@ export default function Receive() {
               await cctpApi.markAsRedeemed({
                 transactionHash,
                 userAddress: address,
-                redeemTxHash: result.transactionHash,
+                redeemTxHash: txHash,
               });
               await loadCCTPDeposits();
             } catch (err) {
@@ -309,7 +318,7 @@ export default function Receive() {
             }
           }
 
-          alert(`USDC received successfully! Transaction: ${result.transactionHash}`);
+          alert(`USDC received successfully! Transaction: ${txHash}`);
           // Reset form
           setTransactionHash('');
           setAttestation(null);
@@ -336,12 +345,21 @@ export default function Receive() {
         });
 
         if (result.success) {
+          const txHash = result.transactionHash || result.deposit?.transactionHash;
+          
+          if (!txHash) {
+            console.warn('Transaction hash not found in result:', result);
+            setError('Transaction completed but hash not available');
+            setReceiving(false);
+            return;
+          }
+
           // Mark deposit as redeemed in backend
           if (selectedDeposit) {
             try {
               await rariApi.markAsRedeemed({
                 id: selectedDeposit.id,
-                redeemTxHash: result.transactionHash,
+                redeemTxHash: txHash,
               });
               // Reload deposits list
               await loadRariDeposits();
@@ -354,7 +372,7 @@ export default function Receive() {
               await rariApi.markAsRedeemed({
                 nonce,
                 userAddress: address,
-                redeemTxHash: result.transactionHash,
+                redeemTxHash: txHash,
               });
               await loadRariDeposits();
             } catch (err) {
@@ -362,7 +380,7 @@ export default function Receive() {
             }
           }
 
-          alert(`USDC received successfully! Transaction: ${result.transactionHash}`);
+          alert(`USDC received successfully! Transaction: ${txHash}`);
           // Reset form
           setAmount('');
           setNonce('');
