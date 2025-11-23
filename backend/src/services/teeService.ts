@@ -2,7 +2,7 @@ import { Trader, Signal } from '../types/index.js';
 
 export class TEEService {
   /**
-   * Register a new trader (both on-chain and in database)
+   * Register a new trader (on-chain only)
    */
   async registerTrader(
     address: string,

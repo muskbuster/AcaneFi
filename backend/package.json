@@ -6,7 +6,6 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "migrate": "tsx database/migrate.ts",
     "test:cdp:signature": "tsx src/scripts/test-cdp-signature.ts",
     "transfer:to:cdp": "tsx src/scripts/transfer-to-cdp-wallet.ts"
   },
