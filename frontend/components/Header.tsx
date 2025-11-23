@@ -93,6 +93,20 @@ export default function Header() {
                   >
                     Receive
                   </Link>
+                  <Link
+                    href="/mint-mockusdc"
+                    className="px-4 py-2 text-muted-foreground hover:text-primary transition font-medium cursor-pointer"
+                  >
+                    Mint USDC
+                  </Link>
+                  <a
+                    href="https://faucet.circle.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 text-muted-foreground hover:text-primary transition font-medium cursor-pointer"
+                  >
+                    USDC Faucet
+                  </a>
                 </>
               ) : (
                 <>
@@ -114,6 +128,20 @@ export default function Header() {
                   >
                     Receive
                   </Link>
+                  <Link
+                    href="/mint-mockusdc"
+                    className="px-4 py-2 text-muted-foreground hover:text-primary transition font-medium cursor-pointer"
+                  >
+                    Mint USDC
+                  </Link>
+                  <a
+                    href="https://faucet.circle.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 text-muted-foreground hover:text-primary transition font-medium cursor-pointer"
+                  >
+                    USDC Faucet
+                  </a>
                 </>
               )}
             </nav>
