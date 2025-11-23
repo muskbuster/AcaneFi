@@ -1,7 +1,7 @@
-// PM2 Ecosystem Configuration
+// PM2 Ecosystem Configuration (ES Module)
 // Usage: pm2 start ecosystem.config.js
 
-module.exports = {
+export default {
   apps: [
     {
       name: 'arcanefi-api',
