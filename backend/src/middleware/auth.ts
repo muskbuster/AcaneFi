@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { pool } from '../config/database.js';
 import { ethers } from 'ethers';
 
 export interface AuthRequest extends Request {
@@ -27,17 +26,75 @@ export async function validateTrader(
       return res.status(401).json({ error: 'Missing authentication headers' });
     }
 
-    // Verify trader exists
-    const result = await pool.query(
-      'SELECT * FROM traders WHERE trader_id = $1 AND address = $2',
-      [parseInt(traderId), address.toLowerCase()]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Trader not registered' });
+    // Verify trader exists on-chain
+    const { cdpWalletService } = await import('../services/cdpWalletService.js');
+    const unifiedVaultAddress = process.env.UNIFIED_VAULT_BASE_SEPOLIA;
+    
+    if (!unifiedVaultAddress) {
+      return res.status(500).json({ error: 'UnifiedVault not configured' });
     }
 
-    const trader = result.rows[0];
+    try {
+      await cdpWalletService.initialize();
+      const provider = await cdpWalletService.getProvider('base-sepolia');
+
+      const unifiedVaultABI = [
+        {
+          name: 'vaultFactory',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [],
+          outputs: [{ name: '', type: 'address' }],
+        },
+      ];
+
+      const unifiedVault = new ethers.Contract(
+        unifiedVaultAddress,
+        unifiedVaultABI,
+        provider
+      );
+
+      const vaultFactoryAddress = await unifiedVault.vaultFactory();
+      if (!vaultFactoryAddress || vaultFactoryAddress === ethers.ZeroAddress) {
+        return res.status(500).json({ error: 'VaultFactory not configured' });
+      }
+
+      const vaultFactoryABI = [
+        {
+          name: 'getTraderAddress',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'traderId', type: 'uint256' }],
+          outputs: [{ name: '', type: 'address' }],
+        },
+        {
+          name: 'isTraderRegistered',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'trader', type: 'address' }],
+          outputs: [{ name: '', type: 'bool' }],
+        },
+      ];
+
+      const vaultFactory = new ethers.Contract(
+        vaultFactoryAddress,
+        vaultFactoryABI,
+        provider
+      );
+
+      const traderAddress = await vaultFactory.getTraderAddress(parseInt(traderId));
+      if (traderAddress.toLowerCase() !== address.toLowerCase()) {
+        return res.status(401).json({ error: 'Trader address mismatch' });
+      }
+
+      const isRegistered = await vaultFactory.isTraderRegistered(traderAddress);
+      if (!isRegistered) {
+        return res.status(401).json({ error: 'Trader not registered' });
+      }
+    } catch (error) {
+      console.error('Error validating trader on-chain:', error);
+      return res.status(500).json({ error: 'Failed to validate trader' });
+    }
 
     // Verify signature (simplified for demo)
     // In production, verify message signature using ethers
@@ -55,9 +112,9 @@ export async function validateTrader(
     }
 
     req.trader = {
-      id: trader.id,
-      address: trader.address,
-      traderId: trader.trader_id,
+      id: parseInt(traderId),
+      address: address.toLowerCase(),
+      traderId: parseInt(traderId),
     };
 
     next();

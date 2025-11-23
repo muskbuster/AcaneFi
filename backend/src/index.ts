@@ -6,7 +6,6 @@ import { tradeRouter } from './api/trade.js';
 import { layerzeroRouter } from './api/layerzero.js';
 import { cctpRouter } from './api/cctp.js';
 import { rariRouter } from './api/rari.js';
-import { initializeDatabase } from './config/database.js';
 
 dotenv.config();
 
@@ -15,9 +14,6 @@ const PORT = process.env.PORT || 3002;
 
 app.use(cors());
 app.use(express.json());
-
-// Initialize database on startup
-initializeDatabase().catch(console.error);
 
 // API Routes
 app.use('/api/tee', teeRouter);

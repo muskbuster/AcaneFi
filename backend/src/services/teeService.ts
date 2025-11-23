@@ -1,4 +1,3 @@
-import { pool } from '../config/database.js';
 import { Trader, Signal } from '../types/index.js';
 
 export class TEEService {
@@ -144,62 +143,108 @@ export class TEEService {
       }
     }
 
-    // Step 2: Register trader in database
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // Check if trader already exists in database
-      const existingResult = await client.query(
-        'SELECT * FROM traders WHERE address = $1',
-        [address.toLowerCase()]
-      );
-
-      if (existingResult.rows.length > 0) {
-        // Trader exists, return existing
-        await client.query('COMMIT');
-        const trader = this.mapRowToTrader(existingResult.rows[0]);
-        return { traderId: trader.traderId, trader };
-      }
-
-      // Insert trader with the traderId from on-chain registration
-      if (!traderId) {
-        throw new Error('traderId not set after on-chain registration');
-      }
-      
-      const result = await client.query(
-        `INSERT INTO traders (address, trader_id, name, strategy_description, performance_fee)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING *`,
-        [address.toLowerCase(), traderId, name, strategyDescription, performanceFee]
-      );
-
-      await client.query('COMMIT');
-
-      const trader = this.mapRowToTrader(result.rows[0]);
-      return { traderId, trader };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
+    // Return trader info (on-chain is source of truth, no DB needed)
+    if (!traderId) {
+      throw new Error('traderId not set after on-chain registration');
     }
+
+    const trader: Trader = {
+      id: traderId, // Use traderId as id
+      address: address.toLowerCase(),
+      traderId,
+      name,
+      strategyDescription,
+      performanceFee,
+      registeredAt: new Date().toISOString(),
+    };
+
+    return { traderId, trader };
   }
 
   /**
-   * Validate if trader exists
+   * Validate if trader exists (check on-chain)
    */
   async validateTrader(traderId: number): Promise<Trader | null> {
-    const result = await pool.query(
-      'SELECT * FROM traders WHERE trader_id = $1',
-      [traderId]
-    );
+    const { ethers } = await import('ethers');
+    const { cdpWalletService } = await import('./cdpWalletService.js');
 
-    if (result.rows.length === 0) {
+    try {
+      const unifiedVaultAddress = process.env.UNIFIED_VAULT_BASE_SEPOLIA;
+      if (!unifiedVaultAddress) {
+        return null;
+      }
+
+      await cdpWalletService.initialize();
+      const provider = await cdpWalletService.getProvider('base-sepolia');
+
+      const unifiedVaultABI = [
+        {
+          name: 'vaultFactory',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [],
+          outputs: [{ name: '', type: 'address' }],
+        },
+      ];
+
+      const unifiedVault = new ethers.Contract(
+        unifiedVaultAddress,
+        unifiedVaultABI,
+        provider
+      );
+
+      const vaultFactoryAddress = await unifiedVault.vaultFactory();
+      if (!vaultFactoryAddress || vaultFactoryAddress === ethers.ZeroAddress) {
+        return null;
+      }
+
+      const vaultFactoryABI = [
+        {
+          name: 'getTraderAddress',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'traderId', type: 'uint256' }],
+          outputs: [{ name: '', type: 'address' }],
+        },
+        {
+          name: 'isTraderRegistered',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'trader', type: 'address' }],
+          outputs: [{ name: '', type: 'bool' }],
+        },
+      ];
+
+      const vaultFactory = new ethers.Contract(
+        vaultFactoryAddress,
+        vaultFactoryABI,
+        provider
+      );
+
+      const traderAddress = await vaultFactory.getTraderAddress(traderId);
+      if (!traderAddress || traderAddress === ethers.ZeroAddress) {
+        return null;
+      }
+
+      const isRegistered = await vaultFactory.isTraderRegistered(traderAddress);
+      if (!isRegistered) {
+        return null;
+      }
+
+      // Return minimal trader info (on-chain is source of truth)
+      return {
+        id: traderId,
+        address: traderAddress.toLowerCase(),
+        traderId,
+        name: '', // Not stored on-chain
+        strategyDescription: '', // Not stored on-chain
+        performanceFee: 0, // Not stored on-chain
+        registeredAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('Error validating trader on-chain:', error);
       return null;
     }
-
-    return this.mapRowToTrader(result.rows[0]);
   }
 
   /**
@@ -226,7 +271,7 @@ export class TEEService {
   }
 
   /**
-   * Submit trading signal
+   * Submit trading signal (no-op, signals are handled on-chain via positions)
    */
   async submitSignal(
     traderId: number,
@@ -250,23 +295,27 @@ export class TEEService {
       throw new Error('Invalid signal type');
     }
 
-    // Insert signal
-    const result = await pool.query(
-      `INSERT INTO signals (trader_id, signal_type, asset, size, price, status)
-       VALUES ($1, $2, $3, $4, $5, 'pending')
-       RETURNING *`,
-      [traderId, signalType, asset, size, price || null]
-    );
-
-    return this.mapRowToSignal(result.rows[0]);
+    // Return mock signal (signals are handled on-chain via createPosition)
+    return {
+      id: Date.now(),
+      traderId,
+      signalType,
+      asset,
+      size,
+      price,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
   }
 
   /**
-   * Get all registered traders
+   * Get all registered traders (returns empty - traders are tracked on-chain)
    */
   async getAllTraders(): Promise<Trader[]> {
-    const result = await pool.query('SELECT * FROM traders ORDER BY registered_at DESC');
-    return result.rows.map((row) => this.mapRowToTrader(row));
+    // Traders are tracked on-chain, not in database
+    // To get all traders, would need to query VaultFactory contract
+    // For now, return empty array
+    return [];
   }
 
   /**
@@ -277,42 +326,15 @@ export class TEEService {
   }
 
   /**
-   * Get trader signals
+   * Get trader signals (returns empty - signals are handled on-chain via positions)
    */
   async getTraderSignals(traderId: number): Promise<Signal[]> {
-    const result = await pool.query(
-      'SELECT * FROM signals WHERE trader_id = $1 ORDER BY created_at DESC',
-      [traderId]
-    );
-    return result.rows.map((row) => this.mapRowToSignal(row));
+    // Signals are handled on-chain via createPosition
+    // To get signals, would need to query on-chain events
+    // For now, return empty array
+    return [];
   }
 
-  // Helper methods
-  private mapRowToTrader(row: any): Trader {
-    return {
-      id: row.id,
-      address: row.address,
-      traderId: row.trader_id,
-      name: row.name,
-      strategyDescription: row.strategy_description,
-      performanceFee: parseFloat(row.performance_fee),
-      registeredAt: row.registered_at,
-    };
-  }
-
-  private mapRowToSignal(row: any): Signal {
-    return {
-      id: row.id,
-      traderId: row.trader_id,
-      signalType: row.signal_type,
-      asset: row.asset,
-      size: parseFloat(row.size),
-      price: row.price ? parseFloat(row.price) : undefined,
-      status: row.status,
-      createdAt: row.created_at,
-      executedAt: row.executed_at || undefined,
-    };
-  }
 
   /**
    * Verify and receive Rari deposit
