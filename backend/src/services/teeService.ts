@@ -175,19 +175,42 @@ export class TEEService {
 
         console.log(`✅ Trader registered on-chain in block ${receipt.blockNumber}`);
 
-        // Wait a bit for the state to update
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait for state to update and retry getting traderId
+        let returnedTraderId = 0n;
+        const maxRetries = 5;
+        for (let retry = 0; retry < maxRetries; retry++) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          returnedTraderId = await vaultFactory.addressToTraderId(address);
+          if (returnedTraderId && returnedTraderId !== 0n) {
+            traderId = Number(returnedTraderId);
+            console.log(`✅ Retrieved traderId: ${traderId} from addressToTraderId mapping (attempt ${retry + 1})`);
+            break;
+          }
+          console.log(`⏳ Waiting for state update... (attempt ${retry + 1}/${maxRetries})`);
+        }
 
-        // Get the traderId directly from the addressToTraderId mapping (most reliable)
-        const returnedTraderId = await vaultFactory.addressToTraderId(address);
-        if (returnedTraderId && returnedTraderId !== 0n) {
-          traderId = Number(returnedTraderId);
-          console.log(`✅ Retrieved traderId: ${traderId} from addressToTraderId mapping`);
-        } else {
-          // Fallback: try to get it from the transaction return value
-          // Note: ethers.js doesn't easily expose return values from transactions
-          // So we'll use the mapping which should be updated by now
-          throw new Error('Failed to retrieve traderId from addressToTraderId mapping after registration');
+        if (!traderId || returnedTraderId === 0n) {
+          // Last resort: check nextTraderId and work backwards
+          console.log(`⚠️  addressToTraderId still 0, trying fallback method...`);
+          const nextTraderId = await vaultFactory.nextTraderId();
+          const maxId = Number(nextTraderId);
+          
+          for (let id = maxId - 1; id >= 1; id--) {
+            try {
+              const traderAddr = await vaultFactory.getTraderAddress(id);
+              if (traderAddr && traderAddr.toLowerCase() === address.toLowerCase()) {
+                traderId = id;
+                console.log(`✅ Found traderId: ${traderId} using fallback method`);
+                break;
+              }
+            } catch (error) {
+              continue;
+            }
+          }
+        }
+
+        if (!traderId) {
+          throw new Error('Failed to retrieve traderId after registration - state may not have updated yet');
         }
       } catch (error: any) {
         if (error.message?.includes('already registered') || error.message?.includes('already has ID')) {

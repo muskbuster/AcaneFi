@@ -375,9 +375,19 @@ export default function Deposit() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Trader
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Select Trader
+                </label>
+                <button
+                  type="button"
+                  onClick={loadTraders}
+                  disabled={loading}
+                  className="text-sm text-blue-600 hover:text-blue-800 underline disabled:opacity-50"
+                >
+                  Refresh
+                </button>
+              </div>
               <select
                 required
                 value={selectedTrader || ''}
@@ -386,12 +396,21 @@ export default function Deposit() {
                 disabled={step !== 'approve'}
               >
                 <option value="">-- Select a trader --</option>
-                {traders.map((trader) => (
-                  <option key={trader.id} value={trader.traderId}>
-                    {trader.name} (Fee: {trader.performanceFee}%)
-                  </option>
-                ))}
+                {traders.length === 0 ? (
+                  <option value="" disabled>No traders available</option>
+                ) : (
+                  traders.map((trader) => (
+                    <option key={trader.id} value={trader.traderId}>
+                      {trader.name} (ID: {trader.traderId}, Fee: {trader.performanceFee}%)
+                    </option>
+                  ))
+                )}
               </select>
+              {traders.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {traders.length} trader{traders.length !== 1 ? 's' : ''} available
+                </p>
+              )}
             </div>
 
             <div>
