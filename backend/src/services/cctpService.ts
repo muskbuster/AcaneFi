@@ -209,10 +209,51 @@ export class CCTPService {
         throw new Error('UNIFIED_VAULT_BASE_SEPOLIA not configured');
       }
 
-      // Initialize CDP wallet
-      await cdpWalletService.initialize();
-      const cdpWalletAddress = await cdpWalletService.getTEEAddress();
-      console.log(`Using CDP wallet: ${cdpWalletAddress}`);
+      // Get provider first (needed for both CDP and fallback)
+      const provider = await cdpWalletService.getProvider('base-sepolia');
+
+      // Initialize CDP wallet (with fallback to direct private key)
+      let useCDP = true;
+      let wallet: ethers.Wallet | null = null;
+      let cdpWalletAddress: string;
+      
+      try {
+        await cdpWalletService.initialize();
+        cdpWalletAddress = await cdpWalletService.getTEEAddress();
+        console.log(`Using CDP wallet: ${cdpWalletAddress}`);
+      } catch (cdpError: any) {
+        console.warn(`⚠️  CDP wallet initialization failed: ${cdpError.message}`);
+        console.log(`Falling back to direct private key signing...`);
+        
+        // Fallback: Use private key directly
+        const privateKey = process.env.PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
+        if (!privateKey) {
+          throw new Error('CDP wallet failed and no PRIVATE_KEY available for fallback');
+        }
+        
+        useCDP = false;
+        
+        // Parse private key (handle hex or base64)
+        try {
+          const hexKey = privateKey.startsWith('0x') ? privateKey : '0x' + privateKey;
+          if (hexKey.length === 66 && /^0x[0-9a-fA-F]{64}$/.test(hexKey)) {
+            wallet = new ethers.Wallet(hexKey, provider);
+          } else {
+            throw new Error('Not a valid hex key');
+          }
+        } catch (keyError) {
+          try {
+            const decoded = Buffer.from(privateKey, 'base64');
+            const hexKey = '0x' + decoded.toString('hex').slice(0, 64);
+            wallet = new ethers.Wallet(hexKey, provider);
+          } catch (e) {
+            throw new Error('Invalid PRIVATE_KEY format - must be hex (64 chars) or base64');
+          }
+        }
+        
+        cdpWalletAddress = wallet.address;
+        console.log(`Using direct private key wallet: ${cdpWalletAddress}`);
+      }
 
       // UnifiedVault ABI (minimal - just receiveBridgedUSDC)
       const unifiedVaultABI = [
@@ -227,9 +268,6 @@ export class CCTPService {
           outputs: [],
         },
       ];
-
-      // Get contract instance for encoding
-      const provider = await cdpWalletService.getProvider('base-sepolia');
       const unifiedVault = new ethers.Contract(
         unifiedVaultAddress,
         unifiedVaultABI,
@@ -267,19 +305,42 @@ export class CCTPService {
         throw new Error(`Gas estimation failed: ${gasError.message || 'Unknown error'}`);
       }
 
-      // Send transaction using CDP wallet with gas estimate
-      const txResult = await cdpWalletService.sendTransaction('base-sepolia', {
-        to: unifiedVaultAddress,
-        data: receiveBridgedUSDCData,
-        gasLimit: gasEstimate * 120n / 100n, // Add 20% buffer
-      });
+      // Send transaction using CDP wallet or direct wallet
+      let transactionHash: string;
+      
+      if (useCDP) {
+        // Use CDP wallet
+        const txResult = await cdpWalletService.sendTransaction('base-sepolia', {
+          to: unifiedVaultAddress,
+          data: receiveBridgedUSDCData,
+          gasLimit: gasEstimate * 120n / 100n, // Add 20% buffer
+        });
+        transactionHash = txResult.transactionHash;
+      } else {
+        // Use direct wallet
+        if (!wallet) {
+          throw new Error('Wallet not initialized for direct signing');
+        }
+        
+        const tx = await wallet.sendTransaction({
+          to: unifiedVaultAddress,
+          data: receiveBridgedUSDCData,
+          gasLimit: gasEstimate * 120n / 100n, // Add 20% buffer
+        });
+        
+        const receipt = await tx.wait();
+        if (!receipt) {
+          throw new Error('Transaction receipt not found');
+        }
+        transactionHash = receipt.hash;
+      }
 
       console.log(`✅ USDC received on Base Sepolia`);
-      console.log(`Transaction hash: ${txResult.transactionHash}`);
+      console.log(`Transaction hash: ${transactionHash}`);
 
       return {
         success: true,
-        transactionHash: txResult.transactionHash,
+        transactionHash: transactionHash,
       };
     } catch (error: any) {
       console.error('Receive bridged USDC error:', error);

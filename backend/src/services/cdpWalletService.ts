@@ -50,75 +50,73 @@ export class CDPWalletService {
     const accountId = process.env.CDP_ACCOUNT_ID;
     
     if (accountId) {
-      // Account already exists in CDP, try to retrieve it
+      // Account already exists in CDP, try to retrieve it by ID first
       try {
-        // First try to get by name
-        this.teeAccount = await this.cdp.evm.getAccount({ name: accountName });
-        console.log(`✅ Using existing CDP account by name: ${this.teeAccount.address as string}`);
-        if (this.teeAccount.id && this.teeAccount.id !== accountId) {
-          console.log(`⚠️  Account ID mismatch. Expected: ${accountId}, Got: ${this.teeAccount.id}`);
+        // Try to get account directly by ID (if CDP SDK supports it)
+        // Note: CDP SDK may not support getAccount by ID directly, so we'll try by name first
+        try {
+          // Try by name first (most reliable)
+          this.teeAccount = await this.cdp.evm.getAccount({ name: accountName });
+          console.log(`✅ Using existing CDP account by name: ${this.teeAccount.address as string}`);
+          if (this.teeAccount.id && this.teeAccount.id !== accountId) {
+            console.log(`⚠️  Account ID mismatch. Expected: ${accountId}, Got: ${this.teeAccount.id}`);
+          }
+        } catch (nameError: any) {
+          // Account not found by name, try to list all accounts and find by ID
+          console.log(`Account not found by name, listing accounts to find by ID: ${accountId}`);
+          try {
+            // List all accounts - check what format it returns
+            const accountsResult = await this.cdp.evm.listAccounts();
+            
+            // Handle different return formats
+            let accounts: any[] = [];
+            if (Array.isArray(accountsResult)) {
+              accounts = accountsResult;
+            } else if (accountsResult && typeof accountsResult === 'object') {
+              // Might be an object with accounts property
+              if (Array.isArray(accountsResult.accounts)) {
+                accounts = accountsResult.accounts;
+              } else if (Array.isArray((accountsResult as any).data)) {
+                accounts = (accountsResult as any).data;
+              } else {
+                // Try to convert object to array
+                accounts = Object.values(accountsResult);
+              }
+            }
+            
+            const foundAccount = accounts.find((acc: any) => acc.id === accountId);
+            if (foundAccount) {
+              this.teeAccount = foundAccount;
+              console.log(`✅ Found existing CDP account by ID in list: ${this.teeAccount.address as string}`);
+            } else {
+              // Account doesn't exist in list
+              throw new Error(`Account with ID ${accountId} not found. Please verify CDP_ACCOUNT_ID is correct or create the account in CDP Portal.`);
+            }
+          } catch (listError: any) {
+            console.error(`Failed to list/find accounts: ${listError.message}`);
+            throw new Error(`Cannot retrieve account. Error: ${listError.message}`);
+          }
         }
       } catch (error: any) {
-        // Account not found by name, try to list all accounts and find by ID
-        console.log(`Account not found by name, listing accounts to find by ID: ${accountId}`);
-        try {
-          // List all accounts - check what format it returns
-          const accountsResult = await this.cdp.evm.listAccounts();
-          
-          // Handle different return formats
-          let accounts: any[] = [];
-          if (Array.isArray(accountsResult)) {
-            accounts = accountsResult;
-          } else if (accountsResult && typeof accountsResult === 'object') {
-            // Might be an object with accounts property
-            if (Array.isArray(accountsResult.accounts)) {
-              accounts = accountsResult.accounts;
-            } else if (Array.isArray((accountsResult as any).data)) {
-              accounts = (accountsResult as any).data;
-            } else {
-              // Try to convert object to array
-              accounts = Object.values(accountsResult);
-            }
-          }
-          
-          const foundAccount = accounts.find((acc: any) => acc.id === accountId);
-          if (foundAccount) {
-            this.teeAccount = foundAccount;
-            console.log(`✅ Found existing CDP account by ID: ${this.teeAccount.address as string}`);
-          } else {
-            // Account doesn't exist in list
-            console.log(`Account with ID ${accountId} not found in list (${accounts.length} accounts found)`);
-            console.log(`Attempting to create new account...`);
-            
-            // Since account doesn't exist, try to create a new one
-            // CDP requires proper key format, so we'll create without importing
-            try {
-              this.teeAccount = await this.cdp.evm.createAccount({
-                name: accountName,
-              });
-              console.log(`✅ Created new CDP account: ${this.teeAccount.address as string}`);
-              console.log(`   Note: This is a new account, not the one with ID ${accountId}`);
-              console.log(`   If you need the specific account, create it in CDP Portal first.`);
-            } catch (createError: any) {
-              throw new Error(`Cannot create or find account. Error: ${createError.message}`);
-            }
-          }
-        } catch (listError: any) {
-          console.error(`Failed to list/find accounts: ${listError.message}`);
-          // If listing fails, we can't proceed without the account
-          throw new Error(`Cannot retrieve account. Error: ${listError.message}`);
+        // If all retrieval methods fail, provide helpful error
+        const errorMessage = error.message || 'Unknown error';
+        if (errorMessage.includes('Invalid key format')) {
+          throw new Error(`CDP account retrieval failed: Invalid key format. Please verify CDP_ACCOUNT_ID (${accountId}) is correct and the account exists in CDP Portal.`);
         }
+        throw new Error(`Cannot retrieve CDP account. Error: ${errorMessage}`);
       }
     } else {
-      // No account ID provided, try to get by name or create new
+      // No account ID provided, try to get by name
       try {
         this.teeAccount = await this.cdp.evm.getAccount({ name: accountName });
         console.log(`✅ Using existing CDP account: ${this.teeAccount.address as string}`);
       } catch (error: any) {
-        // Account doesn't exist - but we can't import without proper key format
-        // CDP requires PEM EC key or base64 Ed25519 key format
-        console.log(`⚠️  Account not found and cannot import: ${error.message}`);
-        throw new Error(`Account '${accountName}' not found. Please create it in CDP Portal or provide account ID.`);
+        // Account doesn't exist - provide helpful error message
+        const errorMessage = error.message || 'Unknown error';
+        if (errorMessage.includes('Invalid key format')) {
+          throw new Error(`CDP account '${accountName}' not found or invalid. Please create it in CDP Portal or set CDP_ACCOUNT_ID.`);
+        }
+        throw new Error(`Account '${accountName}' not found. Please create it in CDP Portal or provide CDP_ACCOUNT_ID. Error: ${errorMessage}`);
       }
     }
 
