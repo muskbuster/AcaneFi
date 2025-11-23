@@ -3,6 +3,7 @@ import { useAccount, useSignMessage } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useRouter } from 'next/router';
 import { teeApi } from '../../lib/api';
+import Header from '../../components/Header';
 
 export default function TraderRegister() {
   const { address, isConnected } = useAccount();
@@ -67,37 +68,42 @@ export default function TraderRegister() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600 mb-6">Please connect your wallet to register as a trader</p>
-          <ConnectButton />
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="bg-card rounded-lg shadow-lg p-8 text-center border border-border">
+            <h2 className="text-2xl font-bold mb-4 text-card-foreground font-heading">Connect Your Wallet</h2>
+            <p className="text-muted-foreground mb-6">Please connect your wallet to register as a trader</p>
+            <ConnectButton />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="py-12">
       <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Register as Trader</h1>
+        <div className="bg-card rounded-lg shadow-lg p-8 border border-border">
+          <h1 className="text-3xl font-bold text-card-foreground mb-6 font-heading">Register as Trader</h1>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded mb-6">
               <strong>Error:</strong> {error}
             </div>
           )}
           
           {loading && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
+            <div className="bg-accent/50 border border-border text-accent-foreground px-4 py-3 rounded mb-6">
               Registering trader on-chain... This may take a few moments.
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Trader Name
               </label>
               <input
@@ -105,13 +111,13 @@ export default function TraderRegister() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                 placeholder="e.g., Alpha Trader"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Strategy Description
               </label>
               <textarea
@@ -121,13 +127,13 @@ export default function TraderRegister() {
                   setFormData({ ...formData, strategyDescription: e.target.value })
                 }
                 rows={4}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                 placeholder="Describe your trading strategy..."
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Performance Fee (%)
               </label>
               <input
@@ -139,12 +145,12 @@ export default function TraderRegister() {
                 onChange={(e) =>
                   setFormData({ ...formData, performanceFee: e.target.value })
                 }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
               />
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
+            <div className="bg-accent/50 border border-border rounded-lg p-4">
+              <p className="text-sm text-accent-foreground">
                 <strong>Note:</strong> Registration requires TEE validation. Your trader ID will be
                 assigned upon successful registration.
               </p>
@@ -153,11 +159,12 @@ export default function TraderRegister() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Registering...' : 'Register Trader'}
             </button>
           </form>
+        </div>
         </div>
       </div>
     </div>

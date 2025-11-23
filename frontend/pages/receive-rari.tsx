@@ -3,6 +3,7 @@ import { useAccount, useChainId, useSwitchChain } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { baseSepolia } from 'wagmi/chains';
 import { rariApi } from '../lib/api';
+import Header from '../components/Header';
 
 // Rari Testnet Chain ID
 const RARI_CHAIN_ID = 1918988905;
@@ -103,57 +104,62 @@ export default function ReceiveRari() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600 mb-6">Please connect your wallet to receive Rari deposits</p>
-          <ConnectButton />
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="bg-card rounded-lg shadow-lg p-8 text-center border border-border">
+            <h2 className="text-2xl font-bold mb-4 text-card-foreground font-heading">Connect Your Wallet</h2>
+            <p className="text-muted-foreground mb-6">Please connect your wallet to receive Rari deposits</p>
+            <ConnectButton />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="py-12">
       <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Receive Rari Deposit</h1>
+        <div className="bg-card rounded-lg shadow-lg p-8 border border-border">
+          <h1 className="text-3xl font-bold text-card-foreground mb-6 font-heading">Receive Rari Deposit</h1>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded mb-6">
               {error}
             </div>
           )}
 
           {/* Chain Status and Switcher */}
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm font-medium text-blue-800 mb-2">
+          <div className="mb-6 p-4 bg-accent/50 rounded-lg border border-border">
+            <p className="text-sm font-medium text-accent-foreground mb-2">
               Current Chain: <span className="font-bold">{chainId === baseSepolia.id ? 'Base Sepolia ✅' : `Chain ID ${chainId} (Switch to Base Sepolia)`}</span>
             </p>
             {chainId !== baseSepolia.id && (
               <button
                 onClick={() => switchChain?.({ chainId: baseSepolia.id })}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
                 disabled={loading || receiving}
               >
                 Switch to Base Sepolia
               </button>
             )}
             {chainId === baseSepolia.id && (
-              <p className="text-sm text-green-700 mt-2">✅ Connected to Base Sepolia - Ready to receive USDC</p>
+              <p className="text-sm text-primary mt-2">✅ Connected to Base Sepolia - Ready to receive USDC</p>
             )}
           </div>
 
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Amount (USDC)
               </label>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                 placeholder="1.0"
                 step="0.01"
                 min="0"
@@ -162,14 +168,14 @@ export default function ReceiveRari() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Nonce
               </label>
               <input
                 type="text"
                 value={nonce}
                 onChange={(e) => setNonce(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                 placeholder="Enter nonce from deposit"
                 disabled={!!attestation}
               />
@@ -179,17 +185,17 @@ export default function ReceiveRari() {
               <button
                 onClick={handleGetAttestation}
                 disabled={loading || !amount || !nonce}
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
               >
                 {loading ? 'Getting Attestation...' : 'Get Attestation'}
               </button>
             ) : (
               <>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-green-800">
+                <div className="bg-accent/50 border border-border rounded-lg p-4">
+                  <p className="text-sm text-accent-foreground">
                     ✅ Attestation retrieved!
                   </p>
-                  <p className="text-xs text-green-700 mt-2">
+                  <p className="text-xs text-muted-foreground mt-2">
                     Amount: {amount} USDC
                     <br />
                     Nonce: {nonce}
@@ -201,7 +207,7 @@ export default function ReceiveRari() {
                 <button
                   onClick={handleReceiveUSDC}
                   disabled={receiving || chainId !== baseSepolia.id}
-                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                  className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
                 >
                   {chainId !== baseSepolia.id
                     ? 'Switch to Base Sepolia to Receive'
@@ -212,8 +218,8 @@ export default function ReceiveRari() {
               </>
             )}
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
+            <div className="bg-accent/50 border border-border rounded-lg p-4">
+              <p className="text-sm text-accent-foreground">
                 <strong>Instructions:</strong>
                 <br />
                 1. Enter the amount and nonce from your Rari deposit
@@ -227,8 +233,8 @@ export default function ReceiveRari() {
             </div>
           </div>
         </div>
+        </div>
       </div>
     </div>
   );
 }
-

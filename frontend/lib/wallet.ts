@@ -1,7 +1,7 @@
-import { createConfig, http } from 'wagmi';
+import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { sepolia, baseSepolia } from 'wagmi/chains';
 import { defineChain } from 'viem';
-import { metaMask, injected, walletConnect } from 'wagmi/connectors';
+import type { Config } from 'wagmi';
 
 // Custom chain definitions using viem
 const rariTestnet = defineChain({
@@ -57,25 +57,15 @@ const arcTestnet = defineChain({
 });
 
 // Configure chains for ArcaneFi
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '';
-
 export const chains = [sepolia, baseSepolia, rariTestnet, arcTestnet] as const;
 
-// Configure wallets - MetaMask first to ensure it appears
-// Using wagmi connectors directly for better compatibility
-export const config = createConfig({
+// Use getDefaultConfig from RainbowKit - automatically includes MetaMask and other wallets
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'wallet-connect';
+
+export const config = getDefaultConfig({
+  appName: 'ArcaneFi',
+  projectId,
   chains,
-  connectors: [
-    metaMask(), // MetaMask connector - should appear first
-    injected(), // Generic injected wallet (for other wallets like Phantom, etc.)
-    ...(projectId && projectId !== 'your-project-id' ? [walletConnect({ projectId })] : []),
-  ],
-  transports: {
-    [sepolia.id]: http(),
-    [baseSepolia.id]: http(),
-    [rariTestnet.id]: http(),
-    [arcTestnet.id]: http(),
-  },
   ssr: true,
-});
+}) as Config;
 

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { parseUnits, formatUnits } from 'viem';
 import { teeApi, cctpApi, rariApi } from '../lib/api';
 import { sepolia, baseSepolia } from 'wagmi/chains';
+import Header from '../components/Header';
 import { 
   getUnifiedVaultAddress, 
   getUSDCAddress,
@@ -626,43 +627,48 @@ export default function Deposit() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600 mb-6">Please connect your wallet to make a deposit</p>
-          <ConnectButton />
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="bg-card rounded-lg shadow-lg p-8 text-center border border-border">
+            <h2 className="text-2xl font-bold mb-4 text-card-foreground font-heading">Connect Your Wallet</h2>
+            <p className="text-muted-foreground mb-6">Please connect your wallet to make a deposit</p>
+            <ConnectButton />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="py-12">
       <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Deposit to Trader</h1>
+        <div className="bg-card rounded-lg shadow-lg p-8 border border-border">
+          <h1 className="text-3xl font-bold text-card-foreground mb-6 font-heading">Deposit to Trader</h1>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded mb-6">
               {error}
             </div>
           )}
 
           {/* Deposit Method Selection */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-card-foreground mb-2">
               Deposit Method
             </label>
             <select
               value={depositMethod}
               onChange={(e) => setDepositMethod(e.target.value as DepositMethod)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
               disabled={step !== 'approve'}
             >
-              <option value="cctp">CCTP (Ethereum Sepolia → Base Sepolia)</option>
-              <option value="rari">Rari (Rari Testnet → Base Sepolia)</option>
+              <option value="cctp" className="bg-card text-card-foreground">CCTP (Ethereum Sepolia → Base Sepolia)</option>
+              <option value="rari" className="bg-card text-card-foreground">Rari (Rari Testnet → Base Sepolia)</option>
             </select>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               {depositMethod === 'cctp' 
                 ? 'Uses Circle CCTP for cross-chain USDC transfer'
                 : 'Uses custom attestation flow for chains without CCTP'}
@@ -671,8 +677,8 @@ export default function Deposit() {
 
           {/* Chain Status */}
           {depositMethod === 'cctp' && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm font-medium text-blue-800 mb-2">
+            <div className="mb-6 bg-accent/50 border border-border rounded-lg p-4">
+              <p className="text-sm font-medium text-accent-foreground mb-2">
                 Current Chain: <span className="font-bold">
                   {chainId === sepolia.id ? 'Ethereum Sepolia ✅' : chainId === baseSepolia.id ? 'Base Sepolia ✅' : `Chain ID ${chainId} (Switch to Ethereum Sepolia or Base Sepolia)`}
                 </span>
@@ -681,7 +687,7 @@ export default function Deposit() {
                 {chainId !== sepolia.id && (
                   <button
                     onClick={() => switchChain?.({ chainId: sepolia.id })}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50 text-sm"
                     disabled={loading}
                   >
                     Switch to Ethereum Sepolia
@@ -690,14 +696,14 @@ export default function Deposit() {
                 {chainId !== baseSepolia.id && (
                   <button
                     onClick={() => switchChain?.({ chainId: baseSepolia.id })}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50 text-sm"
                     disabled={loading}
                   >
                     Switch to Base Sepolia
                   </button>
                 )}
               </div>
-              <p className="text-xs text-blue-700 mt-2">
+              <p className="text-xs text-muted-foreground mt-2">
                 {chainId === sepolia.id && 'Deposit via CCTP → Base Sepolia'}
                 {chainId === baseSepolia.id && 'Direct deposit on Base Sepolia'}
               </p>
@@ -705,8 +711,8 @@ export default function Deposit() {
           )}
 
           {depositMethod === 'rari' && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm font-medium text-blue-800 mb-2">
+            <div className="mb-6 bg-accent/50 border border-border rounded-lg p-4">
+              <p className="text-sm font-medium text-accent-foreground mb-2">
                 Current Chain: <span className="font-bold">
                   {chainId === RARI_CHAIN_ID ? 'Rari Testnet ✅' : `Chain ID ${chainId} (Switch to Rari Testnet)`}
                 </span>
@@ -714,21 +720,21 @@ export default function Deposit() {
               {chainId !== RARI_CHAIN_ID && (
                 <button
                   onClick={() => switchChain?.({ chainId: RARI_CHAIN_ID })}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50 text-sm"
                   disabled={loading}
                 >
                   Switch to Rari Testnet
                 </button>
               )}
               {chainId === RARI_CHAIN_ID && (
-                <p className="text-sm text-green-700 mt-2">✅ Connected to Rari Testnet - Ready to deposit</p>
+                <p className="text-sm text-primary mt-2">✅ Connected to Rari Testnet - Ready to deposit</p>
               )}
             </div>
           )}
 
           {/* Attestation Status */}
           {step === 'attestation' && (
-            <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
+            <div className="bg-accent/50 border border-border text-accent-foreground px-4 py-3 rounded mb-6">
               <p className="font-bold">
                 {depositMethod === 'cctp' ? '⏳ Waiting for CCTP attestation...' : '⏳ Getting Rari attestation...'}
               </p>
@@ -747,8 +753,8 @@ export default function Deposit() {
                 </p>
               )}
               {depositMethod === 'rari' && nonce && (
-                <div className="mt-2 p-2 bg-white border border-yellow-300 rounded">
-                  <p className="text-xs font-semibold text-gray-700 mb-1">Save this nonce for receiving on Base Sepolia:</p>
+                <div className="mt-2 p-2 bg-card border border-border rounded">
+                  <p className="text-xs font-semibold text-card-foreground mb-1">Save this nonce for receiving on Base Sepolia:</p>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono break-all">{nonce}</span>
                     <button
@@ -756,7 +762,7 @@ export default function Deposit() {
                         navigator.clipboard.writeText(nonce);
                         alert('Nonce copied to clipboard!');
                       }}
-                      className="ml-2 px-2 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                      className="ml-2 px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
                     >
                       Copy
                     </button>
@@ -772,7 +778,7 @@ export default function Deposit() {
                 <button
                   onClick={fetchAttestation}
                   disabled={!depositTxHash || !nonce}
-                  className="mt-2 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50 text-sm"
+                  className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 text-sm"
                 >
                   Fetch Attestation
                 </button>
@@ -782,20 +788,20 @@ export default function Deposit() {
 
           {/* Complete Status */}
           {step === 'complete' && attestation && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
+            <div className="bg-accent/50 border border-border text-accent-foreground px-4 py-3 rounded mb-6">
               <p className="font-bold">✅ Attestation received!</p>
               <div className="mt-2 space-y-2">
                 <p className="text-sm mb-2">Ready to receive USDC on Base Sepolia</p>
                 {depositMethod === 'rari' && nonce && (
-                  <div className="bg-white border border-green-300 rounded p-3 mb-2">
-                    <p className="text-xs font-semibold text-gray-700 mb-1">Save this information for receiving:</p>
+                  <div className="bg-card border border-border rounded p-3 mb-2">
+                    <p className="text-xs font-semibold text-card-foreground mb-1">Save this information for receiving:</p>
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Amount:</span>
+                        <span className="text-xs text-muted-foreground">Amount:</span>
                         <span className="text-xs font-mono font-bold">{amount} USDC</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Nonce:</span>
+                        <span className="text-xs text-muted-foreground">Nonce:</span>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-mono font-bold break-all">{nonce}</span>
                           <button
@@ -803,7 +809,7 @@ export default function Deposit() {
                               navigator.clipboard.writeText(nonce);
                               alert('Nonce copied to clipboard!');
                             }}
-                            className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                            className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
                           >
                             Copy
                           </button>
@@ -815,7 +821,7 @@ export default function Deposit() {
                 <div className="flex gap-2">
                   <Link
                     href="/receive"
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
                   >
                     Go to Receive Page
                   </Link>
@@ -828,14 +834,14 @@ export default function Deposit() {
             {/* Trader Selection */}
             <div>
               <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-card-foreground">
                   Select Trader
                 </label>
                 <button
                   type="button"
                   onClick={loadTraders}
                   disabled={loading}
-                  className="text-sm text-blue-600 hover:text-blue-800 underline disabled:opacity-50"
+                  className="text-sm text-primary hover:text-primary/80 underline disabled:opacity-50"
                 >
                   Refresh
                 </button>
@@ -844,15 +850,15 @@ export default function Deposit() {
                 required
                 value={selectedTrader || ''}
                 onChange={(e) => setSelectedTrader(parseInt(e.target.value))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                 disabled={step !== 'approve'}
               >
-                <option value="">-- Select a trader --</option>
+                <option value="" className="bg-card text-card-foreground">-- Select a trader --</option>
                 {traders.length === 0 ? (
-                  <option value="" disabled>No traders available</option>
+                  <option value="" disabled className="bg-card text-card-foreground">No traders available</option>
                 ) : (
                   traders.map((trader) => (
-                    <option key={trader.id} value={trader.traderId}>
+                    <option key={trader.id} value={trader.traderId} className="bg-card text-card-foreground">
                       {trader.name} (ID: {trader.traderId}, Fee: {trader.performanceFee}%)
                     </option>
                   ))
@@ -862,7 +868,7 @@ export default function Deposit() {
 
             {/* Amount Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Amount ({depositMethod === 'rari' ? 'MockUSDC' : 'USDC'})
               </label>
               <input
@@ -872,12 +878,12 @@ export default function Deposit() {
                 step="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                 placeholder="0.00"
                 disabled={step !== 'approve'}
               />
               {depositMethod === 'cctp' && usdcBalance && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Balance: {formatUnits(usdcBalance.value, 6)} USDC
                 </p>
               )}
@@ -890,7 +896,7 @@ export default function Deposit() {
                 disabled={loading || isPending || !selectedTrader || !amount || 
                   (depositMethod === 'cctp' && chainId !== sepolia.id && chainId !== baseSepolia.id) ||
                   (depositMethod === 'rari' && chainId !== RARI_CHAIN_ID)}
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
               >
                 {loading || isPending ? 'Approving...' : `1. Approve ${depositMethod === 'rari' ? 'MockUSDC' : 'USDC'}`}
               </button>
@@ -898,13 +904,13 @@ export default function Deposit() {
 
             {step === 'deposit' && (
               <>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-green-800">✅ {depositMethod === 'rari' ? 'MockUSDC' : 'USDC'} Approved</p>
+                <div className="bg-accent/50 border border-border rounded-lg p-4">
+                  <p className="text-sm text-accent-foreground">✅ {depositMethod === 'rari' ? 'MockUSDC' : 'USDC'} Approved</p>
                 </div>
                 <button
                   onClick={handleDeposit}
                   disabled={loading || isPending}
-                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                  className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
                 >
                   {loading || isPending ? 'Processing...' : 
                     depositMethod === 'cctp' 
@@ -918,15 +924,15 @@ export default function Deposit() {
               <button
                 onClick={fetchAttestation}
                 disabled={!depositTxHash}
-                className="w-full px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition disabled:opacity-50"
+                className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
               >
                 Fetch Attestation
               </button>
             )}
 
             {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
+            <div className="bg-accent/50 border border-border rounded-lg p-4">
+              <p className="text-sm text-accent-foreground">
                 <strong>Note:</strong>
                 {depositMethod === 'cctp' && chainId === sepolia.id && (
                   <> Deposits from Ethereum Sepolia use CCTP. After deposit, go to{' '}
@@ -944,6 +950,7 @@ export default function Deposit() {
               </p>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { useAccount, useChainId } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { baseSepolia } from 'wagmi/chains';
 import { cctpApi } from '../lib/api';
+import Header from '../components/Header';
 
 export default function ReceiveCCTP() {
   const { address, isConnected } = useAccount();
@@ -116,10 +117,10 @@ export default function ReceiveCCTP() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600 mb-6">Please connect your wallet to receive bridged USDC</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="bg-card rounded-lg shadow-lg p-8 text-center border border-border">
+          <h2 className="text-2xl font-bold mb-4 text-card-foreground font-heading">Connect Your Wallet</h2>
+          <p className="text-muted-foreground mb-6">Please connect your wallet to receive bridged USDC</p>
           <ConnectButton />
         </div>
       </div>
@@ -127,40 +128,42 @@ export default function ReceiveCCTP() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
-      <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Receive CCTP Deposit</h1>
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="py-12">
+        <div className="container mx-auto px-4 max-w-2xl">
+          <div className="bg-card rounded-lg shadow-lg p-8 border border-border">
+          <h1 className="text-3xl font-bold text-card-foreground mb-6 font-heading">Receive CCTP Deposit</h1>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded mb-6">
               {error}
             </div>
           )}
 
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Source Domain (Ethereum Sepolia = 0)
               </label>
               <input
                 type="text"
                 value={sourceDomain}
                 onChange={(e) => setSourceDomain(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                 placeholder="0"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Burn Transaction Hash
               </label>
               <input
                 type="text"
                 value={transactionHash}
                 onChange={(e) => setTransactionHash(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                 placeholder="0x..."
               />
             </div>
@@ -168,15 +171,15 @@ export default function ReceiveCCTP() {
             <button
               onClick={handleFetchAttestation}
               disabled={loading || !transactionHash}
-              className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+              className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
             >
               {loading ? 'Fetching Attestation...' : 'Fetch Attestation'}
             </button>
 
             {attestation && (
               <>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-green-800">
+                <div className="bg-accent/50 border border-border rounded-lg p-4">
+                  <p className="text-sm text-accent-foreground">
                     ✅ Attestation retrieved! Status: {attestation.status}
                   </p>
                 </div>
@@ -184,7 +187,7 @@ export default function ReceiveCCTP() {
                 <button
                   onClick={handleReceiveUSDC}
                   disabled={loading || chainId !== baseSepolia.id}
-                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                  className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
                 >
                   {chainId !== baseSepolia.id
                     ? 'Switch to Base Sepolia'
@@ -193,8 +196,8 @@ export default function ReceiveCCTP() {
               </>
             )}
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
+            <div className="bg-accent/50 border border-border rounded-lg p-4">
+              <p className="text-sm text-accent-foreground">
                 <strong>Instructions:</strong>
                 <br />
                 1. Enter the transaction hash from your CCTP burn on Ethereum Sepolia
@@ -208,8 +211,8 @@ export default function ReceiveCCTP() {
             </div>
           </div>
         </div>
+        </div>
       </div>
     </div>
   );
 }
-

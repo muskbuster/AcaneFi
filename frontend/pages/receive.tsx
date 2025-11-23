@@ -3,6 +3,7 @@ import { useAccount, useChainId, useSwitchChain } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { baseSepolia } from 'wagmi/chains';
 import { cctpApi, rariApi } from '../lib/api';
+import Header from '../components/Header';
 
 interface RariDeposit {
   id: string;
@@ -429,66 +430,71 @@ export default function Receive() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600 mb-6">Please connect your wallet to receive bridged USDC</p>
-          <ConnectButton />
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="bg-card rounded-lg shadow-lg p-8 text-center border border-border">
+            <h2 className="text-2xl font-bold mb-4 text-card-foreground font-heading">Connect Your Wallet</h2>
+            <p className="text-muted-foreground mb-6">Please connect your wallet to receive bridged USDC</p>
+            <ConnectButton />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="py-12">
       <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Receive Deposit</h1>
+        <div className="bg-card rounded-lg shadow-lg p-8 border border-border">
+          <h1 className="text-3xl font-bold text-card-foreground mb-6 font-heading">Receive Deposit</h1>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded mb-6">
               {error}
             </div>
           )}
 
           {/* Chain Status and Switcher */}
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm font-medium text-blue-800 mb-2">
+          <div className="mb-6 p-4 bg-accent/50 rounded-lg border border-border">
+            <p className="text-sm font-medium text-accent-foreground mb-2">
               Current Chain: <span className="font-bold">{chainId === baseSepolia.id ? 'Base Sepolia ✅' : `Chain ID ${chainId} (Switch to Base Sepolia)`}</span>
             </p>
             {chainId !== baseSepolia.id && (
               <button
                 onClick={() => switchChain?.({ chainId: baseSepolia.id })}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
                 disabled={loading || receiving}
               >
                 Switch to Base Sepolia
               </button>
             )}
             {chainId === baseSepolia.id && (
-              <p className="text-sm text-green-700 mt-2">✅ Connected to Base Sepolia - Ready to receive USDC</p>
+              <p className="text-sm text-primary mt-2">✅ Connected to Base Sepolia - Ready to receive USDC</p>
             )}
           </div>
 
           <div className="space-y-6">
             {/* Source Chain Dropdown */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Source Chain
               </label>
               <select
                 value={sourceChain}
                 onChange={(e) => handleChainChange(e.target.value as SourceChain)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                 disabled={!!attestation}
               >
                 {CHAIN_OPTIONS.map((chain) => (
-                  <option key={chain.value} value={chain.value}>
+                  <option key={chain.value} value={chain.value} className="bg-card text-card-foreground">
                     {chain.label}
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {isCCTP 
                   ? 'CCTP: Enter the transaction hash from your deposit'
                   : 'Rari: Enter the amount and nonce from your deposit'}
@@ -500,8 +506,8 @@ export default function Receive() {
               <>
                 {/* Unredeemed CCTP Deposits List */}
                 {cctpDeposits.length > 0 && !attestation && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm font-semibold text-blue-900 mb-3">
+                  <div className="bg-accent/50 border border-border rounded-lg p-4">
+                    <p className="text-sm font-semibold text-accent-foreground mb-3">
                       📋 Your Unredeemed CCTP Deposits ({cctpDeposits.length})
                     </p>
                     <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -511,8 +517,8 @@ export default function Receive() {
                           onClick={() => handleSelectDeposit(deposit)}
                           className={`w-full text-left p-3 rounded border transition ${
                             selectedDeposit?.id === deposit.id
-                              ? 'bg-blue-100 border-blue-400'
-                              : 'bg-white border-gray-300 hover:border-blue-300'
+                              ? 'bg-accent border-border'
+                              : 'bg-card border-input hover:border-border'
                           }`}
                         >
                           <div className="flex justify-between items-start">
@@ -520,10 +526,10 @@ export default function Receive() {
                               <p className="font-semibold text-sm">
                                 {deposit.sourceChainName}
                               </p>
-                              <p className="text-xs text-gray-600 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 TX: {deposit.transactionHash.substring(0, 20)}...
                               </p>
-                              <p className="text-xs text-gray-500 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 {new Date(deposit.createdAt).toLocaleString()}
                               </p>
                               {deposit.attestation && (
@@ -536,7 +542,7 @@ export default function Receive() {
                               href={`https://sepolia.etherscan.io/tx/${deposit.transactionHash}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline"
+                              className="text-xs text-primary hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
                               View TX
@@ -548,7 +554,7 @@ export default function Receive() {
                     <button
                       onClick={loadCCTPDeposits}
                       disabled={loadingDeposits}
-                      className="mt-3 text-xs text-blue-600 hover:underline"
+                      className="mt-3 text-xs text-primary hover:underline"
                     >
                       {loadingDeposits ? 'Refreshing...' : '🔄 Refresh List'}
                     </button>
@@ -556,19 +562,19 @@ export default function Receive() {
                 )}
 
                 {cctpDeposits.length === 0 && !loadingDeposits && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                    <p className="text-sm text-yellow-800">
+                  <div className="bg-accent/50 border border-border rounded-lg p-3">
+                    <p className="text-sm text-accent-foreground">
                       No unredeemed CCTP deposits found. Make a deposit first, or enter transaction hash manually below.
                     </p>
                   </div>
                 )}
 
-                <div className="text-sm font-medium text-gray-700 mb-2">
+                <div className="text-sm font-medium text-card-foreground mb-2">
                   {selectedDeposit && 'transactionHash' in selectedDeposit ? 'Selected Deposit Details' : 'Or Enter Manually'}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
                     Burn Transaction Hash
                   </label>
                   <input
@@ -578,11 +584,11 @@ export default function Receive() {
                       setTransactionHash(e.target.value);
                       setSelectedDeposit(null);
                     }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                     placeholder="0x..."
                     disabled={!!attestation}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Transaction hash from your CCTP deposit on {selectedChain.label}
                   </p>
                 </div>
@@ -594,8 +600,8 @@ export default function Receive() {
               <>
                 {/* Unredeemed Deposits List */}
                 {rariDeposits.length > 0 && !attestation && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p className="text-sm font-semibold text-blue-900 mb-3">
+                  <div className="bg-accent/50 border border-border rounded-lg p-4">
+                    <p className="text-sm font-semibold text-accent-foreground mb-3">
                       📋 Your Unredeemed Deposits ({rariDeposits.length})
                     </p>
                     <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -605,8 +611,8 @@ export default function Receive() {
                           onClick={() => handleSelectDeposit(deposit)}
                           className={`w-full text-left p-3 rounded border transition ${
                             selectedDeposit?.id === deposit.id
-                              ? 'bg-blue-100 border-blue-400'
-                              : 'bg-white border-gray-300 hover:border-blue-300'
+                              ? 'bg-accent border-border'
+                              : 'bg-card border-input hover:border-border'
                           }`}
                         >
                           <div className="flex justify-between items-start">
@@ -614,10 +620,10 @@ export default function Receive() {
                               <p className="font-semibold text-sm">
                                 {deposit.amountFormatted} USDC
                               </p>
-                              <p className="text-xs text-gray-600 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 Nonce: {deposit.nonce.substring(0, 20)}...
                               </p>
-                              <p className="text-xs text-gray-500 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 {new Date(deposit.createdAt).toLocaleString()}
                               </p>
                             </div>
@@ -625,7 +631,7 @@ export default function Receive() {
                               href={`https://rari-testnet.calderachain.xyz/tx/${deposit.depositTxHash}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline"
+                              className="text-xs text-primary hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
                               View TX
@@ -637,7 +643,7 @@ export default function Receive() {
                     <button
                       onClick={loadRariDeposits}
                       disabled={loadingDeposits}
-                      className="mt-3 text-xs text-blue-600 hover:underline"
+                      className="mt-3 text-xs text-primary hover:underline"
                     >
                       {loadingDeposits ? 'Refreshing...' : '🔄 Refresh List'}
                     </button>
@@ -645,19 +651,19 @@ export default function Receive() {
                 )}
 
                 {rariDeposits.length === 0 && !loadingDeposits && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                    <p className="text-sm text-yellow-800">
+                  <div className="bg-accent/50 border border-border rounded-lg p-3">
+                    <p className="text-sm text-accent-foreground">
                       No unredeemed deposits found. Make a deposit first, or enter details manually below.
                     </p>
                   </div>
                 )}
 
-                <div className="text-sm font-medium text-gray-700 mb-2">
+                <div className="text-sm font-medium text-card-foreground mb-2">
                   {selectedDeposit ? 'Selected Deposit Details' : 'Or Enter Manually'}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
                     Amount (USDC)
                   </label>
                   <input
@@ -667,7 +673,7 @@ export default function Receive() {
                       setAmount(e.target.value);
                       setSelectedDeposit(null);
                     }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                     placeholder="1.0"
                     step="0.01"
                     min="0"
@@ -676,7 +682,7 @@ export default function Receive() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
                     Nonce
                   </label>
                   <input
@@ -686,7 +692,7 @@ export default function Receive() {
                       setNonce(e.target.value);
                       setSelectedDeposit(null);
                     }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                     placeholder="Enter nonce from deposit"
                     disabled={!!attestation}
                   />
@@ -703,7 +709,7 @@ export default function Receive() {
                   (isCCTP ? !transactionHash : !amount || !nonce) ||
                   chainId !== baseSepolia.id
                 }
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
               >
                 {loading
                   ? 'Fetching Attestation...'
@@ -716,8 +722,8 @@ export default function Receive() {
             {/* Attestation Retrieved */}
             {attestation && (
               <>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-green-800 font-bold">
+                <div className="bg-accent/50 border border-border rounded-lg p-4">
+                  <p className="text-sm text-accent-foreground font-bold">
                     ✅ Attestation retrieved!
                   </p>
                   {isCCTP && (
@@ -741,7 +747,7 @@ export default function Receive() {
                 <button
                   onClick={handleReceiveUSDC}
                   disabled={receiving || chainId !== baseSepolia.id}
-                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                  className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
                 >
                   {chainId !== baseSepolia.id
                     ? 'Switch to Base Sepolia to Receive'
@@ -753,10 +759,10 @@ export default function Receive() {
             )}
 
             {/* Instructions */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800 font-bold mb-2">Instructions:</p>
+            <div className="bg-accent/50 border border-border rounded-lg p-4">
+              <p className="text-sm text-accent-foreground font-bold mb-2">Instructions:</p>
               {isCCTP ? (
-                <ol className="text-sm text-blue-800 list-decimal list-inside space-y-1">
+                <ol className="text-sm text-accent-foreground list-decimal list-inside space-y-1">
                   <li>Select "Ethereum Sepolia (CCTP)" as source chain</li>
                   <li>Enter the transaction hash from your CCTP deposit</li>
                   <li>Click "Fetch CCTP Attestation" to retrieve from Circle API</li>
@@ -765,16 +771,16 @@ export default function Receive() {
                 </ol>
               ) : (
                 <>
-                  <ol className="text-sm text-blue-800 list-decimal list-inside space-y-1 mb-3">
+                  <ol className="text-sm text-accent-foreground list-decimal list-inside space-y-1 mb-3">
                     <li>Select "Rari Testnet" as source chain</li>
                     <li>Enter the amount and nonce from your Rari deposit</li>
                     <li>Click "Get Rari Attestation" to retrieve TEE signature</li>
                     <li>Switch to Base Sepolia and click "Receive USDC"</li>
                     <li>USDC will be transferred to TEE wallet on Base Sepolia</li>
                   </ol>
-                  <div className="bg-yellow-50 border border-yellow-300 rounded p-3 mt-3">
-                    <p className="text-xs font-semibold text-yellow-900 mb-1">📋 Where to find the Nonce:</p>
-                    <p className="text-xs text-yellow-800">
+                  <div className="bg-card border border-border rounded p-3 mt-3">
+                    <p className="text-xs font-semibold text-card-foreground mb-1">📋 Where to find the Nonce:</p>
+                    <p className="text-xs text-card-foreground">
                       After completing a Rari deposit, the nonce is displayed on the deposit page. 
                       Look for the "Nonce" field in the success message after your deposit transaction completes. 
                       You can copy it using the "Copy" button, or it's shown in the green success box.
@@ -784,6 +790,7 @@ export default function Receive() {
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

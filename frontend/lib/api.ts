@@ -1,6 +1,14 @@
 import axios from 'axios';
 
+// Backend API URL - set via NEXT_PUBLIC_API_URL environment variable
+// For local development: http://localhost:3002
+// For deployed backend: https://api.arcane.tachyon.pe (or your deployed URL)
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.arcane.tachyon.pe';
+
+// Log API URL in development to help with debugging
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('🔗 Using API URL:', API_BASE_URL);
+}
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

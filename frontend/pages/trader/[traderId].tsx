@@ -220,9 +220,9 @@ export default function TraderDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       </div>
     );
@@ -230,12 +230,12 @@ export default function TraderDashboard() {
 
   if (!trader) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Trader Not Found</h2>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="bg-card rounded-lg shadow-lg p-8 text-center border border-border">
+          <h2 className="text-2xl font-bold mb-4 text-card-foreground font-heading">Trader Not Found</h2>
           <button
             onClick={() => router.push('/')}
-            className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
           >
             Go Home
           </button>
@@ -247,60 +247,60 @@ export default function TraderDashboard() {
   const totalPnl = positions.reduce((sum, pos) => sum + pos.pnl, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-background">
       <Header />
       <div className="container mx-auto px-4 max-w-6xl py-12">
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
+        <div className="bg-card rounded-lg shadow-lg p-8 mb-6 border border-border">
           <div className="flex justify-between items-start mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">{trader.name}</h1>
-              <p className="text-gray-600">{trader.strategyDescription}</p>
+              <h1 className="text-3xl font-bold text-card-foreground mb-2 font-heading">{trader.name}</h1>
+              <p className="text-muted-foreground">{trader.strategyDescription}</p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-500">Performance Fee</p>
-              <p className="text-2xl font-bold text-primary-600">{trader.performanceFee}%</p>
+              <p className="text-sm text-muted-foreground">Performance Fee</p>
+              <p className="text-2xl font-bold text-primary">{trader.performanceFee}%</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Total Positions</p>
-              <p className="text-2xl font-bold">{positions.length}</p>
+            <div className="bg-accent/50 rounded-lg p-4 border border-border">
+              <p className="text-sm text-muted-foreground">Total Positions</p>
+              <p className="text-2xl font-bold text-card-foreground">{positions.length}</p>
             </div>
-            <div className="bg-green-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Total PnL</p>
-              <p className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="bg-accent/50 rounded-lg p-4 border border-border">
+              <p className="text-sm text-muted-foreground">Total PnL</p>
+              <p className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-primary' : 'text-destructive'}`}>
                 ${totalPnl.toFixed(2)}
               </p>
             </div>
-            <div className="bg-purple-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Trader ID</p>
-              <p className="text-2xl font-bold">#{trader.traderId}</p>
+            <div className="bg-accent/50 rounded-lg p-4 border border-border">
+              <p className="text-sm text-muted-foreground">Trader ID</p>
+              <p className="text-2xl font-bold text-card-foreground">#{trader.traderId}</p>
             </div>
-            <div className="bg-yellow-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600">TEE Wallet Balance</p>
-              <p className="text-2xl font-bold text-yellow-600">{teeBalance} USDC</p>
+            <div className="bg-accent/50 rounded-lg p-4 border border-border">
+              <p className="text-sm text-muted-foreground">TEE Wallet Balance</p>
+              <p className="text-2xl font-bold text-primary">{teeBalance} USDC</p>
             </div>
           </div>
         </div>
 
         {/* CCTP Receive Section - Available to all users */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Receive CCTP Deposit</h2>
-          <p className="text-gray-600 mb-4">
+        <div className="bg-card rounded-lg shadow-lg p-8 mb-6 border border-border">
+          <h2 className="text-2xl font-bold text-card-foreground mb-4 font-heading">Receive CCTP Deposit</h2>
+          <p className="text-muted-foreground mb-4">
             Complete CCTP deposits from Ethereum Sepolia to Base Sepolia. Enter the burn transaction hash to fetch attestation and receive USDC.
           </p>
           
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 CCTP Burn Transaction Hash (Ethereum Sepolia)
               </label>
               <input
                 type="text"
                 value={cctpTransactionHash}
                 onChange={(e) => setCctpTransactionHash(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                 placeholder="0x..."
                 disabled={!!cctpAttestation}
               />
@@ -310,7 +310,7 @@ export default function TraderDashboard() {
               <button
                 onClick={handleFetchCCTPAttestation}
                 disabled={fetchingAttestation || !cctpTransactionHash}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
               >
                 {fetchingAttestation ? 'Fetching Attestation...' : 'Fetch Attestation'}
               </button>
@@ -318,15 +318,15 @@ export default function TraderDashboard() {
 
             {cctpAttestation && (
               <>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-green-800">
+                <div className="bg-accent/50 border border-border rounded-lg p-4">
+                  <p className="text-sm text-accent-foreground">
                     ✅ Attestation retrieved! Status: {cctpAttestation.status}
                   </p>
                 </div>
                 <button
                   onClick={handleReceiveCCTP}
                   disabled={receivingCCTP || chainId !== baseSepolia.id}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                  className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
                 >
                   {chainId !== baseSepolia.id
                     ? 'Switch to Base Sepolia to Receive'
@@ -337,7 +337,7 @@ export default function TraderDashboard() {
               </>
             )}
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="bg-accent/50 border border-border rounded-lg p-4">
               <p className="text-sm text-blue-800">
                 <strong>Instructions:</strong>
                 <br />
@@ -355,16 +355,16 @@ export default function TraderDashboard() {
 
         {isTraderOwner && (
           <>
-            <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Create Position</h2>
+        <div className="bg-card rounded-lg shadow-lg p-8 mb-6 border border-border">
+          <h2 className="text-2xl font-bold text-card-foreground mb-4 font-heading">Create Position</h2>
               <CreatePositionForm traderId={trader.traderId} traderAddress={trader.address} onSuccess={loadData} />
             </div>
-            <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Submit Trading Signal</h2>
+        <div className="bg-card rounded-lg shadow-lg p-8 mb-6 border border-border">
+          <h2 className="text-2xl font-bold text-card-foreground mb-4 font-heading">Submit Trading Signal</h2>
               <form onSubmit={handleSubmitSignal} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
                     Signal Type
                   </label>
                   <select
@@ -372,37 +372,37 @@ export default function TraderDashboard() {
                     onChange={(e) =>
                       setSignalForm({ ...signalForm, signalType: e.target.value as 'LONG' | 'SHORT' })
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                   >
-                    <option value="LONG">LONG</option>
-                    <option value="SHORT">SHORT</option>
+                    <option value="LONG" className="bg-card text-card-foreground">LONG</option>
+                    <option value="SHORT" className="bg-card text-card-foreground">SHORT</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Asset</label>
+                  <label className="block text-sm font-medium text-card-foreground mb-2">Asset</label>
                   <input
                     type="text"
                     required
                     value={signalForm.asset}
                     onChange={(e) => setSignalForm({ ...signalForm, asset: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                     placeholder="e.g., ETH"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Size</label>
+                  <label className="block text-sm font-medium text-card-foreground mb-2">Size</label>
                   <input
                     type="number"
                     required
                     min="0"
                     value={signalForm.size}
                     onChange={(e) => setSignalForm({ ...signalForm, size: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                     placeholder="0.00"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
                     Price (optional)
                   </label>
                   <input
@@ -410,7 +410,7 @@ export default function TraderDashboard() {
                     min="0"
                     value={signalForm.price}
                     onChange={(e) => setSignalForm({ ...signalForm, price: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                     placeholder="0.00"
                   />
                 </div>
@@ -418,7 +418,7 @@ export default function TraderDashboard() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
               >
                 {submitting ? 'Submitting...' : 'Submit Signal'}
               </button>
@@ -427,44 +427,44 @@ export default function TraderDashboard() {
           </>
         )}
 
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Open Positions</h2>
+        <div className="bg-card rounded-lg shadow-lg p-8 border border-border">
+          <h2 className="text-2xl font-bold text-card-foreground mb-4 font-heading">Open Positions</h2>
           {positions.length === 0 ? (
-            <p className="text-gray-600 text-center py-8">No open positions</p>
+            <p className="text-muted-foreground text-center py-8">No open positions</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2">Type</th>
-                    <th className="text-left py-2">Asset</th>
-                    <th className="text-right py-2">Size</th>
-                    <th className="text-right py-2">Entry Price</th>
-                    <th className="text-right py-2">Current Price</th>
-                    <th className="text-right py-2">PnL</th>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 text-card-foreground">Type</th>
+                    <th className="text-left py-2 text-card-foreground">Asset</th>
+                    <th className="text-right py-2 text-card-foreground">Size</th>
+                    <th className="text-right py-2 text-card-foreground">Entry Price</th>
+                    <th className="text-right py-2 text-card-foreground">Current Price</th>
+                    <th className="text-right py-2 text-card-foreground">PnL</th>
                   </tr>
                 </thead>
                 <tbody>
                   {positions.map((position) => (
-                    <tr key={position.id} className="border-b">
+                    <tr key={position.id} className="border-b border-border">
                       <td className="py-2">
                         <span
                           className={`px-2 py-1 rounded ${
                             position.positionType === 'LONG'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
+                              ? 'bg-accent/50 text-primary'
+                              : 'bg-destructive/10 text-destructive'
                           }`}
                         >
                           {position.positionType}
                         </span>
                       </td>
-                      <td className="py-2">-</td>
-                      <td className="text-right py-2">${position.size.toFixed(2)}</td>
-                      <td className="text-right py-2">${position.entryPrice.toFixed(2)}</td>
-                      <td className="text-right py-2">${position.currentPrice.toFixed(2)}</td>
+                      <td className="py-2 text-card-foreground">-</td>
+                      <td className="text-right py-2 text-card-foreground">${position.size.toFixed(2)}</td>
+                      <td className="text-right py-2 text-card-foreground">${position.entryPrice.toFixed(2)}</td>
+                      <td className="text-right py-2 text-card-foreground">${position.currentPrice.toFixed(2)}</td>
                       <td
                         className={`text-right py-2 font-bold ${
-                          position.pnl >= 0 ? 'text-green-600' : 'text-red-600'
+                          position.pnl >= 0 ? 'text-primary' : 'text-destructive'
                         }`}
                       >
                         ${position.pnl.toFixed(2)}

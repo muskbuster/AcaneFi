@@ -5,6 +5,7 @@ import { parseUnits, formatUnits, Address } from 'viem';
 import { sepolia, baseSepolia } from 'wagmi/chains';
 import { layerzeroApi } from '../lib/api';
 import { getOFTAddress, OFT_ABI, addressToBytes32 } from '../lib/contracts';
+import Header from '../components/Header';
 
 export default function BridgeShares() {
   const { address, isConnected } = useAccount();
@@ -107,30 +108,35 @@ export default function BridgeShares() {
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600">Please connect your wallet to bridge shares</p>
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="bg-card rounded-lg shadow-lg p-8 text-center border border-border">
+            <h2 className="text-2xl font-bold mb-4 text-card-foreground font-heading">Connect Your Wallet</h2>
+            <p className="text-muted-foreground">Please connect your wallet to bridge shares</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
-      <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Bridge Vault Shares</h1>
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="py-12">
+        <div className="container mx-auto px-4 max-w-2xl">
+          <div className="bg-card rounded-lg shadow-lg p-8 border border-border">
+          <h1 className="text-3xl font-bold text-card-foreground mb-6 font-heading">Bridge Vault Shares</h1>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            <div className="bg-destructive/10 border border-destructive text-destructive px-4 py-3 rounded mb-6">
               {error}
             </div>
           )}
 
           <form onSubmit={handleBridge} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Source Chain
               </label>
               <div className="flex gap-4">
@@ -139,8 +145,8 @@ export default function BridgeShares() {
                   onClick={() => switchChain?.({ chainId: sepolia.id })}
                   className={`px-4 py-2 rounded-lg ${
                     chainId === sepolia.id
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-200 text-gray-700'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-secondary-foreground'
                   }`}
                 >
                   Ethereum Sepolia
@@ -150,8 +156,8 @@ export default function BridgeShares() {
                   onClick={() => switchChain?.({ chainId: baseSepolia.id })}
                   className={`px-4 py-2 rounded-lg ${
                     chainId === baseSepolia.id
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-200 text-gray-700'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-secondary-foreground'
                   }`}
                 >
                   Base Sepolia
@@ -160,21 +166,21 @@ export default function BridgeShares() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Destination Chain
               </label>
               <select
                 value={destinationChain}
                 onChange={(e) => setDestinationChain(e.target.value as 'ethereum-sepolia' | 'base-sepolia')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
               >
-                <option value="base-sepolia">Base Sepolia</option>
-                <option value="ethereum-sepolia">Ethereum Sepolia</option>
+                <option value="base-sepolia" className="bg-card text-card-foreground">Base Sepolia</option>
+                <option value="ethereum-sepolia" className="bg-card text-card-foreground">Ethereum Sepolia</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-card-foreground mb-2">
                 Amount (Shares)
               </label>
               <input
@@ -184,21 +190,21 @@ export default function BridgeShares() {
                 step="0.000001"
                 value={shares}
                 onChange={(e) => setShares(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-4 py-2 border border-input bg-card text-card-foreground rounded-lg"
                 placeholder="0.0"
               />
             </div>
 
             {fee && (
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-600">
+              <div className="bg-muted rounded-lg p-4">
+                <p className="text-sm text-muted-foreground">
                   Estimated Fee: {formatUnits(fee, 18)} ETH
                 </p>
               </div>
             )}
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
+            <div className="bg-accent/50 border border-border rounded-lg p-4">
+              <p className="text-sm text-accent-foreground">
                 <strong>Note:</strong> Shares will be burned on source chain and minted on destination chain automatically via LayerZero.
               </p>
             </div>
@@ -206,11 +212,12 @@ export default function BridgeShares() {
             <button
               type="submit"
               disabled={loading || isPending || !oftAddress}
-              className="w-full px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading || isPending ? 'Processing...' : 'Bridge Shares'}
             </button>
           </form>
+          </div>
         </div>
       </div>
     </div>

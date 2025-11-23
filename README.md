@@ -168,13 +168,79 @@ Trader
 
 ## Deployment
 
+### Contract Addresses
+
 Contracts are deployed on:
-- Base Sepolia (primary trading chain)
-- Ethereum Sepolia (source chain with CCTP)
-- Arc Testnet (source chain with CCTP)
-- Rari Testnet (source chain with custom attestation)
+- **Base Sepolia** (primary trading chain)
+- **Ethereum Sepolia** (source chain with CCTP)
+- **Arc Testnet** (source chain with CCTP)
+- **Rari Testnet** (source chain with custom attestation)
+
+#### VaultFactory Addresses
+- Base Sepolia: `0xA4604BED3C481fAFF5F8dF0A99bDFc7798190380`
+- Ethereum Sepolia: `0x7AD1F6B4B131535265978f6d14f9F3FaAD1e5670`
+- Rari Testnet: `0xdbD58407D33D730614932325cC7fb8AAf62533C3`
+
+#### UnifiedVault Addresses
+- Base Sepolia: `0x45789e1C1c3c7bE6950355dbCAaBB5647e1bc8f2`
+- Ethereum Sepolia: `0xe9167Bf4aB30E4BA79ee901f89281261B0021e4C`
+- Rari Testnet: `0xDB61eA01ba56A604f8E44d61576D2506e016Fc90`
+
+#### VaultShareOFT Addresses (LayerZero OFT)
+- Base Sepolia: `0x689034e111301e94A60A2E380c2EC124ce95918b`
+- Ethereum Sepolia: `0xA18E9dFb7E24320b696ae0e742e19b72BA82aC7d`
+
+#### USDCOFT Addresses (LayerZero OFT)
+- Base Sepolia: `0xF7E5B59cF11C4090D952e3636aB981a0AF5aA974`
+- Ethereum Sepolia: `0x24A09E8e7f947728342976A11E19a998DeC3a34D`
+
+#### MockUniswap (Base Sepolia)
+- MockUniswap: `0x01e8886b55fb3A69C671416907AA929d737D697F`
+- Mock ETH: `0xb343D2164448333E2981Ce30BfA001443DA9098a`
+- Mock WBTC: `0x715717fa5c882660bB8Eaa3142b91315d8597Fb7`
+- Mock ZEC: `0x5F132592657daAe8488408557b634b9C41680eF9`
+
+#### USDC Token Addresses (Testnet)
+- Ethereum Sepolia: `0x1c7d4b196cb0c7b01d743fbc6116a902379c7238`
+- Base Sepolia: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
+- Rari Testnet (MockUSDC): `0xec690C24B7451B85B6167a06292e49B5DA822fBE`
+
+#### CCTP Contracts (Testnet - Same for all chains)
+- TokenMessengerV2: `0x8FE6B999Dc680CcFDD5bF7EB0974218be2542DAA`
+- MessageTransmitterV2: `0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275`
+- TokenMinterV2: `0xb43db544E2c27092c107639Ad201b3dEfAbcF192`
+- Domains: Ethereum Sepolia=0, Base Sepolia=6, Arc Testnet=26
+
+#### LayerZero Endpoint V2 (Testnet)
+- Ethereum Sepolia: `0x6EDCE65403992e310A62460808c4b910D972f10f`
+- Base Sepolia: `0x6EDCE65403992e310A62460808c4b910D972f10f`
+- Arc Testnet: `0x6EDCE65403992e310A62460808c4b910D972f10f`
+
+#### TEE Wallet Address
+- Base Sepolia: `0x278258D222028BDbC165684923443FE10BFD4b95` (CDP Managed)
+
+### RPC Endpoints
+
+- Base Sepolia: `https://sepolia.base.org`
+- Ethereum Sepolia: `https://ethereum-sepolia-rpc.publicnode.com` or `https://sepolia.gateway.tenderly.co`
+- Arc Testnet: `https://rpc.testnet.arc.network`
+- Rari Testnet: `https://rari-testnet.calderachain.xyz/http`
+
+### Backend API
 
 Backend API is deployed on AWS EC2 at `https://api.arcane.tachyon.pe` with SSL certificate.
+
+### CDP (Coinbase Developer Platform) Configuration
+
+The TEE service uses CDP Server Wallets v2 for secure key management:
+- Get API keys and wallet secret from: https://portal.cdp.coinbase.com/
+- Documentation: https://docs.cdp.coinbase.com/server-wallets/v2/introduction/accounts
+- All TEE operations use CDP wallets with keys stored in secure enclaves
+- Private keys never leave secure enclaves
+
+### Environment Variables
+
+See `backend/env.example`, `frontend/env.example`, and `contracts/env.example` for required environment variables.
 
 ## Testing
 
