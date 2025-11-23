@@ -214,7 +214,7 @@ export class CCTPService {
 
       // Initialize CDP wallet (with fallback to direct private key)
       let useCDP = true;
-      let wallet: ethers.Wallet | null = null;
+      let wallet: any = null; // ethers.Wallet - imported dynamically
       let cdpWalletAddress: string;
       
       try {
