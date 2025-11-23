@@ -33,8 +33,7 @@ async function main() {
     const signatureResult = await cdp.evm.signMessage({
       address: account.address as `0x${string}`,
       message: testMessage,
-      network: 'base-sepolia', // Use base-sepolia for testing
-    });
+    } as any);
 
     console.log('✅ Message signed successfully!');
     console.log(`   Signature: ${signatureResult.signature}\n`);
@@ -61,8 +60,7 @@ async function main() {
     const rawSignatureResult = await cdp.evm.signMessage({
       address: account.address as `0x${string}`,
       message: rawMessage,
-      network: 'base-sepolia',
-    });
+    } as any);
 
     console.log('✅ Raw message signed successfully!');
     console.log(`   Signature: ${rawSignatureResult.signature}\n`);

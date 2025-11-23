@@ -73,8 +73,8 @@ export class CDPWalletService {
             // Might be an object with accounts property
             if (Array.isArray(accountsResult.accounts)) {
               accounts = accountsResult.accounts;
-            } else if (Array.isArray(accountsResult.data)) {
-              accounts = accountsResult.data;
+            } else if (Array.isArray((accountsResult as any).data)) {
+              accounts = (accountsResult as any).data;
             } else {
               // Try to convert object to array
               accounts = Object.values(accountsResult);
@@ -243,8 +243,7 @@ export class CDPWalletService {
     const signatureResult = await this.cdp.evm.signMessage({
       address: this.teeAccount.address as `0x${string}`,
       message: messageHash, // Pass the hash as hex string
-      network: network as any,
-    });
+    } as any);
 
     return signatureResult.signature;
   }

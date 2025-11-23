@@ -137,7 +137,7 @@ async function main() {
 
     // Transfer USDC
     console.log('   Transferring USDC...');
-    const usdcContractWithSigner = usdcContract.connect(mainWallet);
+    const usdcContractWithSigner = usdcContract.connect(mainWallet) as any;
     const usdcTx = await usdcContractWithSigner.transfer(cdpWalletAddress, usdcToTransfer);
     console.log(`   ✅ USDC transfer sent: ${usdcTx.hash}`);
     const usdcReceipt = await usdcTx.wait();

@@ -155,7 +155,7 @@ export class TEEService {
       name,
       strategyDescription,
       performanceFee,
-      registeredAt: new Date().toISOString(),
+      registeredAt: new Date(),
     };
 
     return { traderId, trader };
@@ -239,7 +239,7 @@ export class TEEService {
         name: '', // Not stored on-chain
         strategyDescription: '', // Not stored on-chain
         performanceFee: 0, // Not stored on-chain
-        registeredAt: new Date().toISOString(),
+        registeredAt: new Date(),
       };
     } catch (error) {
       console.error('Error validating trader on-chain:', error);
@@ -304,7 +304,7 @@ export class TEEService {
       size,
       price,
       status: 'pending',
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
     };
   }
 
