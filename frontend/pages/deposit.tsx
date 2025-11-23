@@ -3,7 +3,7 @@ import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTra
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { parseUnits, formatUnits } from 'viem';
+import { parseUnits, formatUnits, encodeFunctionData } from 'viem';
 import { teeApi, cctpApi, rariApi } from '../lib/api';
 import { sepolia, baseSepolia } from 'wagmi/chains';
 import Header from '../components/Header';
@@ -369,9 +369,27 @@ export default function Deposit() {
         };
         
         // Add explicit gas parameters for Rari Testnet to prevent incorrect fee estimates
-        if (depositMethod === 'rari') {
-          contractConfig.maxFeePerGas = 2000000000n; // 2 gwei
-          contractConfig.maxPriorityFeePerGas = 1000000000n; // 1 gwei
+        // Use gasPrice (legacy) instead of maxFeePerGas to bypass RPC gas estimation
+        if (depositMethod === 'rari' && publicClient) {
+          // Estimate gas ourselves to avoid RPC returning incorrect values
+          try {
+            const data = encodeFunctionData({
+              abi: USDC_ABI,
+              functionName: 'approve',
+              args: [spenderAddress, depositAmount],
+            });
+            const gasEstimate = await publicClient.estimateGas({
+              account: address,
+              to: usdcAddress,
+              data,
+            });
+            contractConfig.gas = gasEstimate * 120n / 100n; // Add 20% buffer
+            console.log('📊 Estimated approval gas:', gasEstimate.toString());
+          } catch (gasErr) {
+            console.warn('Gas estimation failed, using default:', gasErr);
+            contractConfig.gas = 100000n; // Fallback
+          }
+          contractConfig.gasPrice = 2000000000n; // 2 gwei - legacy gasPrice
         }
         
         writeContract(contractConfig);
@@ -482,14 +500,36 @@ export default function Deposit() {
 
         setCurrentTxType('deposit');
         try {
+          // Estimate gas ourselves to avoid RPC returning incorrect values
+          let estimatedGas = 300000n; // Default fallback
+          if (publicClient) {
+            try {
+              const data = encodeFunctionData({
+                abi: UNIFIED_VAULT_ABI,
+                functionName: 'depositRari',
+                args: [BigInt(selectedTrader), depositAmount],
+              });
+              const gasEstimate = await publicClient.estimateGas({
+                account: address,
+                to: vaultAddress,
+                data,
+              });
+              estimatedGas = gasEstimate;
+              console.log('📊 Estimated gas:', estimatedGas.toString());
+            } catch (gasErr) {
+              console.warn('Gas estimation failed, using default:', gasErr);
+            }
+          }
+
+          // Use gasPrice (legacy) instead of maxFeePerGas for Rari Testnet
+          // This prevents MetaMask from using incorrect RPC gas estimates
           writeContract({
             address: vaultAddress,
             abi: UNIFIED_VAULT_ABI,
             functionName: 'depositRari',
             args: [BigInt(selectedTrader), depositAmount],
-            // Explicit gas parameters for Rari Testnet to prevent incorrect fee estimates
-            maxFeePerGas: 2000000000n, // 2 gwei
-            maxPriorityFeePerGas: 1000000000n, // 1 gwei
+            gas: estimatedGas * 120n / 100n, // Add 20% buffer
+            gasPrice: 2000000000n, // 2 gwei - use legacy gasPrice for Rari Testnet
           });
         } catch (writeErr: any) {
           console.error('Write contract error:', writeErr);
