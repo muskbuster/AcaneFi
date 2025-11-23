@@ -28,13 +28,17 @@ teeRouter.post('/register-trader', async (req, res) => {
       success: true,
       traderId: result.traderId,
       trader: result.trader,
+      transactionHash: (result as any).transactionHash || null, // Include transaction hash if available
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Invalid request', details: error.errors });
     }
     console.error('Register trader error:', error);
-    res.status(500).json({ error: 'Failed to register trader' });
+    res.status(500).json({ 
+      error: error.message || 'Failed to register trader',
+      details: error.stack 
+    });
   }
 });
 

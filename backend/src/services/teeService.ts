@@ -9,19 +9,51 @@ export class TEEService {
     name: string,
     strategyDescription: string,
     performanceFee: number
-  ): Promise<{ traderId: number; trader: Trader }> {
+  ): Promise<{ traderId: number; trader: Trader; transactionHash?: string }> {
     const { ethers } = await import('ethers');
-    const { cdpWalletService } = await import('./cdpWalletService.js');
 
-    // Step 1: Register trader on-chain in VaultFactory
+    // Step 1: Register trader on-chain in VaultFactory using deployer's private key
+    // (The deployer is the TEE address in VaultFactory)
     const unifiedVaultAddress = process.env.UNIFIED_VAULT_BASE_SEPOLIA;
     if (!unifiedVaultAddress || unifiedVaultAddress === '0x0000000000000000000000000000000000000000') {
       throw new Error('UNIFIED_VAULT_BASE_SEPOLIA not configured');
     }
 
-    await cdpWalletService.initialize();
-    const provider = await cdpWalletService.getProvider('base-sepolia');
-    const teeWalletAddress = await cdpWalletService.getTEEAddress();
+    // Get deployer's private key from environment
+    // Try to use the hex key that matches the TEE address (from contracts/.env)
+    // If not found, fall back to PRIVATE_KEY
+    let privateKey = process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY;
+    if (!privateKey) {
+      throw new Error('PRIVATE_KEY or DEPLOYER_PRIVATE_KEY not configured - needed to call registerTrader as TEE');
+    }
+
+    // Create provider and wallet for Base Sepolia
+    const rpcUrl = process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org';
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    
+    // Decode private key (handle hex and base64)
+    let wallet: any;
+    try {
+      // Try as hex first (with or without 0x prefix)
+      const hexKey = privateKey.startsWith('0x') ? privateKey : '0x' + privateKey;
+      // Check if it's valid hex (64 chars for 32 bytes)
+      if (hexKey.length === 66 && /^0x[0-9a-fA-F]{64}$/.test(hexKey)) {
+        wallet = new ethers.Wallet(hexKey, provider);
+      } else {
+        throw new Error('Not a valid hex key');
+      }
+    } catch (error) {
+      // If hex fails, try base64
+      try {
+        const decoded = Buffer.from(privateKey, 'base64');
+        const hexKey = '0x' + decoded.toString('hex').slice(0, 64); // Take first 32 bytes
+        wallet = new ethers.Wallet(hexKey, provider);
+      } catch (e) {
+        throw new Error('Invalid PRIVATE_KEY format - must be hex (64 chars) or base64');
+      }
+    }
+
+    console.log(`📝 Using TEE wallet (deployer): ${wallet.address}`);
 
     // Get VaultFactory address from UnifiedVault
     const unifiedVaultABI = [
@@ -68,6 +100,20 @@ export class TEEService {
         inputs: [{ name: 'trader', type: 'address' }],
         outputs: [{ name: '', type: 'bool' }],
       },
+      {
+        name: 'teeAddress',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [{ name: '', type: 'address' }],
+      },
+      {
+        name: 'nextTraderId',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }],
+      },
     ];
 
     const vaultFactory = new ethers.Contract(
@@ -76,9 +122,21 @@ export class TEEService {
       provider
     );
 
+    // Verify that wallet address matches TEE address in VaultFactory
+    const teeAddress = await vaultFactory.teeAddress();
+    console.log(`🔍 Wallet address: ${wallet.address}`);
+    console.log(`🔍 TEE address in VaultFactory: ${teeAddress}`);
+    
+    if (wallet.address.toLowerCase() !== teeAddress.toLowerCase()) {
+      console.warn(`⚠️  Wallet address does not match TEE address. This may fail if the wallet is not authorized.`);
+      // Don't throw error - let the contract revert if unauthorized
+      // This allows testing with different keys
+    }
+
     // Check if trader is already registered
     const isAlreadyRegistered = await vaultFactory.isTraderRegistered(address);
     let traderId: number | undefined;
+    let transactionHash: string | undefined;
 
     if (isAlreadyRegistered) {
       // Get existing trader ID by checking addresses
@@ -95,34 +153,66 @@ export class TEEService {
         throw new Error('Trader registered on-chain but could not find traderId');
       }
     } else {
-      // Register trader on-chain using CDP wallet (TEE wallet)
+      // Register trader on-chain using deployer's wallet (TEE wallet)
       console.log(`📝 Registering trader on-chain in VaultFactory...`);
-      const registerData = vaultFactory.interface.encodeFunctionData('registerTrader', [address]);
-
+      
       try {
-        const txResult = await cdpWalletService.sendTransaction('base-sepolia', {
-          to: vaultFactoryAddress,
-          data: registerData,
-        });
-
-        console.log(`✅ Trader registered on-chain: ${txResult.transactionHash}`);
+        const vaultFactoryWithSigner = vaultFactory.connect(wallet) as any;
+        const tx = await vaultFactoryWithSigner.registerTrader(address);
+        
+        transactionHash = tx.hash;
+        console.log(`✅ Transaction sent: ${transactionHash}`);
         
         // Wait for transaction to be mined
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        const receipt = await tx.wait();
+        
+        if (!receipt) {
+          throw new Error('Transaction receipt not found');
+        }
+
+        console.log(`✅ Trader registered on-chain in block ${receipt.blockNumber}`);
+
+        // Wait a bit for the state to update
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Get the traderId by checking which traderId now has this address
-        // We'll need to check traderId 1, 2, 3, etc. until we find it
-        // Or we can parse it from events, but for simplicity, let's check sequentially
-        for (let id = 1; id <= 100; id++) {
-          const traderAddr = await vaultFactory.getTraderAddress(id);
-          if (traderAddr.toLowerCase() === address.toLowerCase()) {
-            traderId = id;
-            break;
+        // Check from nextTraderId backwards to find the newly registered trader
+        const nextTraderId = await vaultFactory.nextTraderId();
+        const maxId = Number(nextTraderId);
+        
+        for (let id = maxId - 1; id >= 1; id--) {
+          try {
+            const traderAddr = await vaultFactory.getTraderAddress(id);
+            if (traderAddr && traderAddr.toLowerCase() === address.toLowerCase()) {
+              traderId = id;
+              console.log(`✅ Found traderId: ${traderId} for address ${address}`);
+              break;
+            }
+          } catch (error) {
+            // Skip invalid trader IDs
+            continue;
           }
         }
 
         if (!traderId) {
-          throw new Error('Failed to retrieve traderId after registration');
+          // Last resort: check all IDs from 1 to maxId
+          console.log(`⚠️  Checking all trader IDs from 1 to ${maxId}...`);
+          for (let id = 1; id < maxId; id++) {
+            try {
+              const traderAddr = await vaultFactory.getTraderAddress(id);
+              if (traderAddr && traderAddr.toLowerCase() === address.toLowerCase()) {
+                traderId = id;
+                console.log(`✅ Found traderId: ${traderId} for address ${address}`);
+                break;
+              }
+            } catch (error) {
+              continue;
+            }
+          }
+        }
+
+        if (!traderId) {
+          throw new Error(`Failed to retrieve traderId after registration. Checked IDs 1 to ${maxId - 1}`);
         }
       } catch (error: any) {
         if (error.message?.includes('already registered') || error.message?.includes('already has ID')) {
@@ -158,7 +248,8 @@ export class TEEService {
       registeredAt: new Date(),
     };
 
-    return { traderId, trader };
+    console.log(`✅ Returning trader registration result: traderId=${traderId}, transactionHash=${transactionHash || 'N/A'}`);
+    return { traderId, trader, transactionHash: transactionHash || undefined };
   }
 
   /**
@@ -317,16 +408,13 @@ export class TEEService {
 
     try {
       const unifiedVaultAddress = process.env.UNIFIED_VAULT_BASE_SEPOLIA;
-      console.log('🔍 Getting traders - UnifiedVault:', unifiedVaultAddress);
-      
       if (!unifiedVaultAddress || unifiedVaultAddress === '0x0000000000000000000000000000000000000000') {
-        console.error('❌ UNIFIED_VAULT_BASE_SEPOLIA not configured');
+        console.warn('UNIFIED_VAULT_BASE_SEPOLIA not configured');
         return [];
       }
 
       await cdpWalletService.initialize();
       const provider = await cdpWalletService.getProvider('base-sepolia');
-      console.log('✅ Provider initialized');
 
       // Get VaultFactory address from UnifiedVault
       const unifiedVaultABI = [
@@ -346,10 +434,8 @@ export class TEEService {
       );
 
       const vaultFactoryAddress = await unifiedVault.vaultFactory();
-      console.log('✅ VaultFactory address:', vaultFactoryAddress);
-      
       if (!vaultFactoryAddress || vaultFactoryAddress === ethers.ZeroAddress) {
-        console.error('❌ VaultFactory not configured in UnifiedVault');
+        console.warn('VaultFactory not configured in UnifiedVault');
         return [];
       }
 
@@ -387,10 +473,8 @@ export class TEEService {
       // Get nextTraderId to know how many traders exist
       const nextTraderId = await vaultFactory.nextTraderId();
       const traderCount = Number(nextTraderId);
-      console.log(`📊 Found ${traderCount} trader slots (nextTraderId: ${traderCount})`);
 
       if (traderCount === 0) {
-        console.log('⚠️  No traders registered yet');
         return [];
       }
 
@@ -401,7 +485,6 @@ export class TEEService {
           const traderAddress = await vaultFactory.getTraderAddress(i);
           if (traderAddress && traderAddress !== ethers.ZeroAddress) {
             const isRegistered = await vaultFactory.isTraderRegistered(traderAddress);
-            console.log(`  Trader ${i}: ${traderAddress} (registered: ${isRegistered})`);
             if (isRegistered) {
               traders.push({
                 id: i,
@@ -416,15 +499,13 @@ export class TEEService {
           }
         } catch (error) {
           // Skip invalid trader IDs
-          console.warn(`⚠️  Failed to get trader ${i}:`, error);
+          console.warn(`Failed to get trader ${i}:`, error);
         }
       }
 
-      console.log(`✅ Returning ${traders.length} traders`);
       return traders;
-    } catch (error: any) {
-      console.error('❌ Failed to get all traders from on-chain:', error);
-      console.error('   Error details:', error.message, error.stack);
+    } catch (error) {
+      console.error('Failed to get all traders from on-chain:', error);
       return [];
     }
   }

@@ -28,7 +28,7 @@ export default function TraderRegister() {
     setError('');
 
     try {
-      // Register trader via TEE
+      // Register trader via TEE (backend calls VaultFactory contract)
       const result = await teeApi.registerTrader({
         address,
         name: formData.name,
@@ -37,13 +37,29 @@ export default function TraderRegister() {
       });
 
       if (result.success) {
+        // Show success message with transaction hash if available
+        const successMessage = result.transactionHash
+          ? `Trader registered successfully!\n\nTrader ID: ${result.traderId}\nTransaction: ${result.transactionHash}\n\nView on BaseScan: https://sepolia.basescan.org/tx/${result.transactionHash}`
+          : `Trader registered successfully!\n\nTrader ID: ${result.traderId}`;
+        
+        console.log('✅ Trader registered:', result);
+        if (result.transactionHash) {
+          console.log('   Transaction:', result.transactionHash);
+          console.log('   BaseScan:', `https://sepolia.basescan.org/tx/${result.transactionHash}`);
+        }
+        
+        // Show success alert
+        alert(successMessage);
+        
+        // Navigate to trader page
         router.push(`/trader/${result.traderId}`);
       } else {
-        setError('Registration failed');
+        setError(result.error || 'Registration failed');
       }
     } catch (err: any) {
       console.error('Registration error:', err);
-      setError(err.response?.data?.error || 'Failed to register trader');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to register trader';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -69,7 +85,13 @@ export default function TraderRegister() {
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-              {error}
+              <strong>Error:</strong> {error}
+            </div>
+          )}
+          
+          {loading && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
+              Registering trader on-chain... This may take a few moments.
             </div>
           )}
 
