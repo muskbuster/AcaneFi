@@ -18,6 +18,7 @@ export default {
       instances: 1,
       exec_mode: 'fork',
       cwd: __dirname,
+      env_file: '.env',
       env: {
         NODE_ENV: 'production',
         PORT: 3002,
