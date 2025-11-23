@@ -77,44 +77,51 @@ export class TEEService {
       throw new Error('VaultFactory not configured in UnifiedVault');
     }
 
-    // VaultFactory ABI for registerTrader
-    const vaultFactoryABI = [
-      {
-        name: 'registerTrader',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [{ name: 'trader', type: 'address' }],
-        outputs: [{ name: 'traderId', type: 'uint256' }],
-      },
-      {
-        name: 'getTraderAddress',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'traderId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'address' }],
-      },
-      {
-        name: 'isTraderRegistered',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'trader', type: 'address' }],
-        outputs: [{ name: '', type: 'bool' }],
-      },
-      {
-        name: 'teeAddress',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'address' }],
-      },
-      {
-        name: 'nextTraderId',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }],
-      },
-    ];
+      // VaultFactory ABI for registerTrader
+      const vaultFactoryABI = [
+        {
+          name: 'registerTrader',
+          type: 'function',
+          stateMutability: 'nonpayable',
+          inputs: [{ name: 'trader', type: 'address' }],
+          outputs: [{ name: 'traderId', type: 'uint256' }],
+        },
+        {
+          name: 'getTraderAddress',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'traderId', type: 'uint256' }],
+          outputs: [{ name: '', type: 'address' }],
+        },
+        {
+          name: 'addressToTraderId',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: '', type: 'address' }],
+          outputs: [{ name: '', type: 'uint256' }],
+        },
+        {
+          name: 'isTraderRegistered',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'trader', type: 'address' }],
+          outputs: [{ name: '', type: 'bool' }],
+        },
+        {
+          name: 'teeAddress',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [],
+          outputs: [{ name: '', type: 'address' }],
+        },
+        {
+          name: 'nextTraderId',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [],
+          outputs: [{ name: '', type: 'uint256' }],
+        },
+      ];
 
     const vaultFactory = new ethers.Contract(
       vaultFactoryAddress,
@@ -139,18 +146,14 @@ export class TEEService {
     let transactionHash: string | undefined;
 
     if (isAlreadyRegistered) {
-      // Get existing trader ID by checking addresses
-      console.log('⚠️  Trader already registered on-chain, finding traderId...');
-      for (let id = 1; id <= 100; id++) {
-        const traderAddr = await vaultFactory.getTraderAddress(id);
-        if (traderAddr.toLowerCase() === address.toLowerCase()) {
-          traderId = id;
-          console.log(`✅ Found existing traderId: ${traderId}`);
-          break;
-        }
-      }
-      if (!traderId) {
-        throw new Error('Trader registered on-chain but could not find traderId');
+      // Get existing trader ID directly from mapping
+      console.log('⚠️  Trader already registered on-chain, getting traderId from mapping...');
+      const existingTraderId = await vaultFactory.addressToTraderId(address);
+      if (existingTraderId && existingTraderId !== 0n) {
+        traderId = Number(existingTraderId);
+        console.log(`✅ Found existing traderId: ${traderId}`);
+      } else {
+        throw new Error('Trader registered on-chain but traderId is 0');
       }
     } else {
       // Register trader on-chain using deployer's wallet (TEE wallet)
@@ -173,59 +176,28 @@ export class TEEService {
         console.log(`✅ Trader registered on-chain in block ${receipt.blockNumber}`);
 
         // Wait a bit for the state to update
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Get the traderId by checking which traderId now has this address
-        // Check from nextTraderId backwards to find the newly registered trader
-        const nextTraderId = await vaultFactory.nextTraderId();
-        const maxId = Number(nextTraderId);
-        
-        for (let id = maxId - 1; id >= 1; id--) {
-          try {
-            const traderAddr = await vaultFactory.getTraderAddress(id);
-            if (traderAddr && traderAddr.toLowerCase() === address.toLowerCase()) {
-              traderId = id;
-              console.log(`✅ Found traderId: ${traderId} for address ${address}`);
-              break;
-            }
-          } catch (error) {
-            // Skip invalid trader IDs
-            continue;
-          }
-        }
-
-        if (!traderId) {
-          // Last resort: check all IDs from 1 to maxId
-          console.log(`⚠️  Checking all trader IDs from 1 to ${maxId}...`);
-          for (let id = 1; id < maxId; id++) {
-            try {
-              const traderAddr = await vaultFactory.getTraderAddress(id);
-              if (traderAddr && traderAddr.toLowerCase() === address.toLowerCase()) {
-                traderId = id;
-                console.log(`✅ Found traderId: ${traderId} for address ${address}`);
-                break;
-              }
-            } catch (error) {
-              continue;
-            }
-          }
-        }
-
-        if (!traderId) {
-          throw new Error(`Failed to retrieve traderId after registration. Checked IDs 1 to ${maxId - 1}`);
+        // Get the traderId directly from the addressToTraderId mapping (most reliable)
+        const returnedTraderId = await vaultFactory.addressToTraderId(address);
+        if (returnedTraderId && returnedTraderId !== 0n) {
+          traderId = Number(returnedTraderId);
+          console.log(`✅ Retrieved traderId: ${traderId} from addressToTraderId mapping`);
+        } else {
+          // Fallback: try to get it from the transaction return value
+          // Note: ethers.js doesn't easily expose return values from transactions
+          // So we'll use the mapping which should be updated by now
+          throw new Error('Failed to retrieve traderId from addressToTraderId mapping after registration');
         }
       } catch (error: any) {
         if (error.message?.includes('already registered') || error.message?.includes('already has ID')) {
-          // Trader already registered, find the traderId
-          for (let id = 1; id <= 100; id++) {
-            const traderAddr = await vaultFactory.getTraderAddress(id);
-            if (traderAddr.toLowerCase() === address.toLowerCase()) {
-              traderId = id;
-              break;
-            }
-          }
-          if (!traderId) {
-            throw new Error('Trader already registered but could not find traderId');
+          // Trader already registered, get traderId from mapping
+          const existingTraderId = await vaultFactory.addressToTraderId(address);
+          if (existingTraderId && existingTraderId !== 0n) {
+            traderId = Number(existingTraderId);
+            console.log(`✅ Found existing traderId: ${traderId} from mapping`);
+          } else {
+            throw new Error('Trader already registered but traderId is 0');
           }
         } else {
           throw error;
