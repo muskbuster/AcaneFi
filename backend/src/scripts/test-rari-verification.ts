@@ -10,7 +10,7 @@
 
 import axios from 'axios';
 
-const API_URL = process.env.API_URL || 'http://localhost:3001';
+const API_URL = process.env.API_URL || 'http://localhost:3002';
 
 async function testRariVerification() {
   console.log('🧪 Testing Rari Deposit Verification Endpoint\n');
