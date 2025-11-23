@@ -317,13 +317,16 @@ export class TEEService {
 
     try {
       const unifiedVaultAddress = process.env.UNIFIED_VAULT_BASE_SEPOLIA;
+      console.log('🔍 Getting traders - UnifiedVault:', unifiedVaultAddress);
+      
       if (!unifiedVaultAddress || unifiedVaultAddress === '0x0000000000000000000000000000000000000000') {
-        console.warn('UNIFIED_VAULT_BASE_SEPOLIA not configured');
+        console.error('❌ UNIFIED_VAULT_BASE_SEPOLIA not configured');
         return [];
       }
 
       await cdpWalletService.initialize();
       const provider = await cdpWalletService.getProvider('base-sepolia');
+      console.log('✅ Provider initialized');
 
       // Get VaultFactory address from UnifiedVault
       const unifiedVaultABI = [
@@ -343,8 +346,10 @@ export class TEEService {
       );
 
       const vaultFactoryAddress = await unifiedVault.vaultFactory();
+      console.log('✅ VaultFactory address:', vaultFactoryAddress);
+      
       if (!vaultFactoryAddress || vaultFactoryAddress === ethers.ZeroAddress) {
-        console.warn('VaultFactory not configured in UnifiedVault');
+        console.error('❌ VaultFactory not configured in UnifiedVault');
         return [];
       }
 
@@ -382,8 +387,10 @@ export class TEEService {
       // Get nextTraderId to know how many traders exist
       const nextTraderId = await vaultFactory.nextTraderId();
       const traderCount = Number(nextTraderId);
+      console.log(`📊 Found ${traderCount} trader slots (nextTraderId: ${traderCount})`);
 
       if (traderCount === 0) {
+        console.log('⚠️  No traders registered yet');
         return [];
       }
 
@@ -394,6 +401,7 @@ export class TEEService {
           const traderAddress = await vaultFactory.getTraderAddress(i);
           if (traderAddress && traderAddress !== ethers.ZeroAddress) {
             const isRegistered = await vaultFactory.isTraderRegistered(traderAddress);
+            console.log(`  Trader ${i}: ${traderAddress} (registered: ${isRegistered})`);
             if (isRegistered) {
               traders.push({
                 id: i,
@@ -408,13 +416,15 @@ export class TEEService {
           }
         } catch (error) {
           // Skip invalid trader IDs
-          console.warn(`Failed to get trader ${i}:`, error);
+          console.warn(`⚠️  Failed to get trader ${i}:`, error);
         }
       }
 
+      console.log(`✅ Returning ${traders.length} traders`);
       return traders;
-    } catch (error) {
-      console.error('Failed to get all traders from on-chain:', error);
+    } catch (error: any) {
+      console.error('❌ Failed to get all traders from on-chain:', error);
+      console.error('   Error details:', error.message, error.stack);
       return [];
     }
   }
