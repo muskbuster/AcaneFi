@@ -7,7 +7,7 @@ export default {
       name: 'arcanefi-api',
       script: 'src/index.ts',
       interpreter: 'node',
-      interpreter_args: '--loader tsx/esm',
+      interpreter_args: '--import tsx/esm',
       instances: 1,
       exec_mode: 'fork',
       env: {
