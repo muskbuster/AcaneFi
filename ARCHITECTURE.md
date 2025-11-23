@@ -1,226 +1,155 @@
-# ArcaneFi Architecture
+# ArcaneFi Architecture and Workflow
 
-## Overview
+## System Integration Diagram
 
-ArcaneFi is a cross-chain, non-custodial copy trading platform that enables users to follow and copy trades from registered traders across multiple blockchain networks.
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           ArcaneFi Platform                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-## Core Components
+┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│ Ethereum Sepolia │      │   Base Sepolia   │      │   Rari Testnet   │
+│                  │      │  (Trading Chain) │      │                  │
+│                  │      │                  │      │                  │
+│  UnifiedVault    │      │  UnifiedVault    │      │  UnifiedVault    │
+│  VaultFactory    │      │  VaultFactory    │      │  VaultFactory    │
+│  USDCOFT         │      │  MockUniswap     │      │  MockUSDC        │
+│  VaultShareOFT   │      │  USDCOFT         │      │                  │
+│                  │      │  VaultShareOFT   │      │                  │
+└────────┬─────────┘      └────────┬─────────┘      └────────┬─────────┘
+         │                        │                         │
+         │                        │                         │
+         │  CCTP Bridge           │                         │  Custom Attestation
+         │  (Circle)              │                         │  (TEE Signed)
+         │                        │                         │
+         └────────────────────────┼─────────────────────────┘
+                                  │
+                                  │
+                    ┌─────────────▼─────────────┐
+                    │   TEE Backend API        │
+                    │   (AWS EC2)              │
+                    │                          │
+                    │  - Trader Registration   │
+                    │  - Position Creation     │
+                    │  - CCTP Receive          │
+                    │  - Rari Verification     │
+                    │  - Price Fetching        │
+                    └─────────────┬─────────────┘
+                                  │
+                    ┌─────────────┼─────────────┐
+                    │             │             │
+         ┌──────────▼───┐  ┌─────▼─────┐  ┌───▼────────┐
+         │ CDP Wallets   │  │ CoinGecko  │  │ Circle     │
+         │ (Coinbase)    │  │ API        │  │ CCTP       │
+         │               │  │            │  │ Attestation│
+         │ Secure Key    │  │ Price Data │  │ Service    │
+         │ Management    │  │            │  │            │
+         └───────────────┘  └────────────┘  └────────────┘
+```
 
-### 1. Smart Contracts
+## Deposit Workflow
 
-#### VaultFactory.sol
-- **Purpose**: Core vault management and trader registration
-- **Key Features**:
-  - Trader registration (TEE-only)
-  - Deposit/withdrawal management
-  - TVL tracking per trader
-  - Integration with OFT vault shares
+```
+User on Source Chain
+    │
+    │ 1. Approve USDC to UnifiedVault
+    │ 2. Call depositViaCCTP() or depositRari()
+    ▼
+UnifiedVault (Source Chain)
+    │
+    ├─ CCTP Flow:
+    │  │
+    │  │ 3. Burn USDC via TokenMessenger
+    │  │ 4. Get attestation from Circle
+    │  │ 5. Call TEE API /api/cctp/receive
+    │  │
+    │  └─► TEE API uses CDP wallet to call receiveBridgedUSDC()
+    │
+    └─ Rari Flow:
+       │
+       │ 3. Lock USDC in UnifiedVault
+       │ 4. Call TEE API /api/rari/attestation (get signed message)
+       │ 5. Call TEE API /api/tee/verify-rari-deposit
+       │
+       └─► TEE API uses CDP wallet to call receiveAttested()
 
-#### VaultShareOFT.sol
-- **Purpose**: Cross-chain vault shares using LayerZero OFT
-- **Key Features**:
-  - ERC20 token representing vault shares
-  - Mint/burn functionality
-  - Cross-chain transfer capability (LayerZero integration)
-  - Per-trader share tracking
+Base Sepolia - UnifiedVault
+    │
+    │ 6. USDC minted/received to TEE wallet
+    ▼
+TEE Wallet (CDP Managed)
+    │
+    │ Funds ready for trading
+    ▼
+```
 
-#### UnifiedBalanceVault.sol
-- **Purpose**: Circle Gateway integration for unified USDC management
-- **Key Features**:
-  - Cross-chain balance tracking
-  - Unified balance view
-  - Programmatic rebalancing
+## Position Creation Workflow
 
-### 2. Backend Services
+```
+Trader
+    │
+    │ 1. Upload trading instruction/signal/strategy logic
+    │ 2. Sign message: "ArcaneFi: Create position for trader {id}"
+    │ 3. Call TEE API /api/tee/create-position
+    │    - traderId, traderAddress, signature, tokenType, amountIn
+    ▼
+TEE API
+    │
+    │ 4. Verify trader on-chain (VaultFactory.isTraderRegistered)
+    │ 5. Verify signature (ECDSA.recover)
+    │ 6. Validate trading instruction against pre-approved strategy rules
+    │ 7. Check risk limits (leverage, exposure caps, stop-loss)
+    │ 8. Fetch market data from CoinGecko or exchange API
+    │ 9. Update MockUniswap.setPrice() (for testing)
+    │ 10. Check TEE wallet balance (pooled vault liquidity)
+    │ 11. Execute trade via CDP wallet on integrated exchange
+    │ 12. Log position on-chain with transparent accounting
+    ▼
+Integrated Exchange (HyperLiquid/MockUniswap)
+    │
+    │ 13. Trade executed according to strategy rules
+    │ 14. Position opened using pooled vault funds
+    ▼
+TEE Wallet (Pooled Vault)
+    │
+    │ Position created - PnL tracked on-chain
+    │ Performance fees calculated and distributed
+    ▼
+```
 
-#### TEE Service
-- **Purpose**: Trusted Execution Environment simulation
-- **Responsibilities**:
-  - Trader registration and validation
-  - Deposit permission validation
-  - Trading signal submission and validation
-  - Access control enforcement
+## Trader Registration Workflow
 
-#### Trade Service
-- **Purpose**: Trading execution and position management
-- **Responsibilities**:
-  - Mock trade execution (for demo)
-  - Position tracking
-  - PnL calculation
-  - Price simulation
+```
+Trader
+    │
+    │ 1. Call TEE API /api/tee/register-trader
+    │    - address, name, strategyDescription, performanceFee
+    ▼
+TEE API
+    │
+    │ 2. Check if trader already registered on-chain
+    │ 3. If not, call VaultFactory.registerTrader() via CDP wallet
+    │ 4. Get traderId from on-chain registration
+    │ 5. Return traderId and trader info
+    ▼
+VaultFactory (Base Sepolia)
+    │
+    │ Trader registered with unique traderId
+    │ Address stored on-chain
+    ▼
+```
 
-#### Circle Gateway Service
-- **Purpose**: Unified balance management across chains
-- **Responsibilities**:
-  - Unified balance queries
-  - Cross-chain transfers
-  - Chain-specific balance tracking
+## Key Components
 
-#### LayerZero Service
-- **Purpose**: Cross-chain communication configuration
-- **Responsibilities**:
-  - Endpoint management
-  - Fee estimation
-  - Trusted remote path configuration
+**VaultFactory**: On-chain trader registry. Stores trader addresses and IDs. Only TEE can register traders.
 
-### 3. Frontend
+**UnifiedVault**: Cross-chain deposit handler. Supports CCTP (for Ethereum/Base/Arc) and custom attestation (for Rari).
 
-#### Pages
-- **Home (`/`)**: Browse available traders
-- **Trader Registration (`/trader/register`)**: Register as a trader
-- **Deposit (`/deposit`)**: Deposit USDC to copy trade
-- **Trader Dashboard (`/trader/[traderId]`)**: View trader performance and submit signals
+**TEE API**: Backend service managing trader operations. Uses CDP wallets for all on-chain actions. Verifies traders on-chain before executing trades. Enforces non-custodial guarantees, rules-based execution, and risk limits. Logs all positions and PnL on-chain for transparent accounting.
 
-#### Key Features
-- Wallet connection (RainbowKit/Wagmi)
-- Real-time position updates
-- Cross-chain chain switching
-- Trader signal submission
+**CDP Server Wallets**: Secure wallet management by Coinbase. Private keys stored in secure enclaves. Used for all TEE on-chain operations. The TEE owns the trading account - traders cannot directly access funds.
 
-## Access Control Architecture
+**MockUniswap**: Simulated DEX for testing. Accepts USDC, mints tokens based on prices fetched from CoinGecko. In production, replaced with actual exchange integrations (HyperLiquid or other exchanges).
 
-### TEE Registration System
-
-1. **Trader Registration Flow**:
-   ```
-   Trader → Frontend → TEE API → Database
-   ```
-   - Only TEE service can register traders
-   - Assigns unique traderId
-   - Stores trader metadata
-
-2. **Deposit Permission Flow**:
-   ```
-   User → Frontend → TEE Validation → Smart Contract
-   ```
-   - TEE validates trader exists
-   - User can only deposit to registered traders
-   - Smart contract enforces permissions
-
-3. **Trading Signal Flow**:
-   ```
-   Trader → Frontend → Signature → TEE Validation → Trade Execution
-   ```
-   - Trader signs message
-   - TEE validates traderId and signature
-   - Signal queued for execution
-
-## Data Flow
-
-### Deposit Flow
-1. User selects trader and chain
-2. Frontend validates trader via TEE API
-3. User approves USDC transfer
-4. Circle Gateway handles cross-chain transfer
-5. VaultFactory records deposit
-6. VaultShareOFT mints shares
-7. Shares can be bridged via LayerZero
-
-### Trading Flow
-1. Trader submits signal (LONG/SHORT)
-2. TEE validates trader authentication
-3. Signal stored in database
-4. Trade service executes mock trade
-5. Position created with entry price
-6. Prices update periodically (simulated)
-7. PnL calculated in real-time
-
-### Withdrawal Flow
-1. User burns OFT shares
-2. VaultFactory processes withdrawal
-3. USDC transferred back to user
-4. Can withdraw to any chain via Circle Gateway
-
-## Database Schema
-
-### Traders Table
-- Stores trader registration information
-- Links wallet address to traderId
-- Tracks performance fee and strategy
-
-### Deposits Table
-- Records all user deposits
-- Tracks chain-specific deposits
-- Links to traders table
-
-### Positions Table
-- Tracks open/closed positions
-- Stores entry/current prices
-- Calculates PnL
-
-### Signals Table
-- Stores trading signals
-- Tracks signal status (pending/executed/rejected)
-- Links to traders table
-
-## Security Considerations
-
-### Access Control
-- TEE-only trader registration
-- Signature-based trader authentication
-- Deposit validation before execution
-
-### Smart Contract Security
-- Ownable pattern for admin functions
-- SafeERC20 for token transfers
-- Input validation on all functions
-
-### API Security
-- JWT tokens for authentication
-- TEE secret for internal endpoints
-- Signature verification for trader actions
-
-## Integration Points
-
-### Circle Gateway
-- Unified balance API
-- Cross-chain transfer API
-- Wallet management
-
-### LayerZero
-- OFT contract deployment
-- Endpoint configuration
-- Cross-chain message passing
-
-### CDP Trade API (Mocked)
-- Trade execution simulation
-- Position management
-- PnL calculation
-
-## Demo Limitations
-
-For the hackathon demo:
-- Trading is mocked (no real execution)
-- Circle Gateway uses mock responses
-- LayerZero OFT is partially implemented
-- No real blockchain transactions for trades
-
-## Production Considerations
-
-1. **Full LayerZero Integration**:
-   - Complete OFT implementation
-   - Configure all trusted remotes
-   - Test cross-chain transfers
-
-2. **Real Circle Gateway**:
-   - Integrate actual API
-   - Handle webhooks
-   - Implement proper error handling
-
-3. **CDP Trade API**:
-   - Real trade execution
-   - Order management
-   - Risk controls
-
-4. **Security Enhancements**:
-   - Full signature verification
-   - Rate limiting
-   - Input sanitization
-   - Audit smart contracts
-
-5. **Scalability**:
-   - Database indexing
-   - Caching layer
-   - Load balancing
-   - Monitoring and logging
+**Pooled Vaults**: Vaults tied to specific traders where users deposit liquidity. The TEE uses pooled vault funds to execute trades. Users earn proportional returns based on their vault share allocation. Traders earn performance fees on profitable trades.
 
