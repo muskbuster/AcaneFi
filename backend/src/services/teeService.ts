@@ -309,13 +309,114 @@ export class TEEService {
   }
 
   /**
-   * Get all registered traders (returns empty - traders are tracked on-chain)
+   * Get all registered traders from on-chain VaultFactory
    */
   async getAllTraders(): Promise<Trader[]> {
-    // Traders are tracked on-chain, not in database
-    // To get all traders, would need to query VaultFactory contract
-    // For now, return empty array
-    return [];
+    const { ethers } = await import('ethers');
+    const { cdpWalletService } = await import('./cdpWalletService.js');
+
+    try {
+      const unifiedVaultAddress = process.env.UNIFIED_VAULT_BASE_SEPOLIA;
+      if (!unifiedVaultAddress || unifiedVaultAddress === '0x0000000000000000000000000000000000000000') {
+        console.warn('UNIFIED_VAULT_BASE_SEPOLIA not configured');
+        return [];
+      }
+
+      await cdpWalletService.initialize();
+      const provider = await cdpWalletService.getProvider('base-sepolia');
+
+      // Get VaultFactory address from UnifiedVault
+      const unifiedVaultABI = [
+        {
+          name: 'vaultFactory',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [],
+          outputs: [{ name: '', type: 'address' }],
+        },
+      ];
+
+      const unifiedVault = new ethers.Contract(
+        unifiedVaultAddress,
+        unifiedVaultABI,
+        provider
+      );
+
+      const vaultFactoryAddress = await unifiedVault.vaultFactory();
+      if (!vaultFactoryAddress || vaultFactoryAddress === ethers.ZeroAddress) {
+        console.warn('VaultFactory not configured in UnifiedVault');
+        return [];
+      }
+
+      // VaultFactory ABI
+      const vaultFactoryABI = [
+        {
+          name: 'nextTraderId',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [],
+          outputs: [{ name: '', type: 'uint256' }],
+        },
+        {
+          name: 'getTraderAddress',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'traderId', type: 'uint256' }],
+          outputs: [{ name: '', type: 'address' }],
+        },
+        {
+          name: 'isTraderRegistered',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'trader', type: 'address' }],
+          outputs: [{ name: '', type: 'bool' }],
+        },
+      ];
+
+      const vaultFactory = new ethers.Contract(
+        vaultFactoryAddress,
+        vaultFactoryABI,
+        provider
+      );
+
+      // Get nextTraderId to know how many traders exist
+      const nextTraderId = await vaultFactory.nextTraderId();
+      const traderCount = Number(nextTraderId);
+
+      if (traderCount === 0) {
+        return [];
+      }
+
+      // Query all traders from ID 1 to nextTraderId - 1
+      const traders: Trader[] = [];
+      for (let i = 1; i < traderCount; i++) {
+        try {
+          const traderAddress = await vaultFactory.getTraderAddress(i);
+          if (traderAddress && traderAddress !== ethers.ZeroAddress) {
+            const isRegistered = await vaultFactory.isTraderRegistered(traderAddress);
+            if (isRegistered) {
+              traders.push({
+                id: i,
+                address: traderAddress,
+                traderId: i,
+                name: `Trader ${i}`, // Default name since not stored on-chain
+                strategyDescription: 'Registered trader', // Default description
+                performanceFee: 0, // Default fee
+                registeredAt: new Date(),
+              });
+            }
+          }
+        } catch (error) {
+          // Skip invalid trader IDs
+          console.warn(`Failed to get trader ${i}:`, error);
+        }
+      }
+
+      return traders;
+    } catch (error) {
+      console.error('Failed to get all traders from on-chain:', error);
+      return [];
+    }
   }
 
   /**

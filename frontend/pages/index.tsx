@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import { teeApi } from '../lib/api';
+import Header from '../components/Header';
 
 interface Trader {
   id: number;
@@ -35,46 +36,49 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <Header />
       <div className="container mx-auto px-4 py-8">
         <header className="mb-12 text-center">
           <h1 className="text-5xl font-bold text-gray-900 mb-4">
             ArcaneFi
           </h1>
           <p className="text-xl text-gray-600 mb-8">
-            Cross-Chain Non-Custodial Copy Trading Platform
+            Cross-Chain Social Trading Platform
           </p>
-          <div className="flex justify-center gap-4 flex-wrap">
-            {isConnected ? (
-              <>
-                <Link
-                  href="/trader/register"
-                  className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                >
-                  Register as Trader
-                </Link>
-                <Link
-                  href="/deposit"
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                >
-                  Deposit to Trader
-                </Link>
-                <Link
-                  href="/bridge-shares"
-                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
-                >
-                  Bridge Shares
-                </Link>
-                <Link
-                  href="/receive-cctp"
-                  className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
-                >
-                  Receive CCTP
-                </Link>
-              </>
-            ) : (
-              <p className="text-gray-600">Connect your wallet to get started</p>
-            )}
-          </div>
+          {isConnected && (
+            <div className="flex justify-center gap-4 flex-wrap">
+              <Link
+                href="/trader/register"
+                className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+              >
+                Register as Trader
+              </Link>
+              <Link
+                href="/deposit"
+                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+              >
+                Deposit to Trader
+              </Link>
+              <Link
+                href="/bridge-shares"
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+              >
+                Bridge Shares
+              </Link>
+              <Link
+                href="/receive-cctp"
+                className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+              >
+                Receive CCTP
+              </Link>
+              <Link
+                href="/deposit-rari"
+                className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition"
+              >
+                Deposit via Rari
+              </Link>
+            </div>
+          )}
         </header>
 
         <section className="mb-12">

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.arcane.tachyon.pe';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -63,6 +63,17 @@ export const teeApi = {
 
   getTraderSignals: async (traderId: number) => {
     const response = await api.get(`/api/tee/traders/${traderId}/signals`);
+    return response.data;
+  },
+
+  createPosition: async (data: {
+    traderId: number;
+    traderAddress: string;
+    signature: string;
+    tokenType: 'ETH' | 'WBTC' | 'ZEC';
+    amountIn: string;
+  }) => {
+    const response = await api.post('/api/tee/create-position', data);
     return response.data;
   },
 };
@@ -181,6 +192,26 @@ export const cctpApi = {
       message,
       attestation,
     });
+    return response.data;
+  },
+};
+
+// Rari API
+export const rariApi = {
+  getAttestation: async (amount: string, nonce: string) => {
+    const response = await api.get('/api/rari/attestation', {
+      params: { amount, nonce },
+    });
+    return response.data;
+  },
+
+  verifyAndReceive: async (data: {
+    amount: string;
+    nonce: string;
+    sourceChainId: string;
+    signature: string;
+  }) => {
+    const response = await api.post('/api/tee/verify-rari-deposit', data);
     return response.data;
   },
 };

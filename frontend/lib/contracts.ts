@@ -16,6 +16,16 @@ export const UNIFIED_VAULT_ABI = [
     outputs: [],
   },
   {
+    name: 'depositRari',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'traderId', type: 'uint256' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
     name: 'receiveBridgedUSDC',
     type: 'function',
     stateMutability: 'nonpayable',
@@ -153,7 +163,7 @@ export async function getUnifiedVaultAddress(chain: string): Promise<Address | n
       'ethereum-sepolia': process.env.NEXT_PUBLIC_UNIFIED_VAULT_ETHEREUM_SEPOLIA as Address || '0x0000000000000000000000000000000000000000',
       'base-sepolia': process.env.NEXT_PUBLIC_UNIFIED_VAULT_BASE_SEPOLIA as Address || '0x0000000000000000000000000000000000000000',
       'arc': process.env.NEXT_PUBLIC_UNIFIED_VAULT_ARC as Address || '0x0000000000000000000000000000000000000000',
-      
+      'rari': process.env.NEXT_PUBLIC_UNIFIED_VAULT_RARI as Address || '0x0000000000000000000000000000000000000000',
     };
     return addresses[chain] || null;
   } catch (error) {

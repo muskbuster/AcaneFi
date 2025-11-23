@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useAccount, useChainId } from 'wagmi';
-import { useWriteContract } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { baseSepolia } from 'wagmi/chains';
 import { cctpApi } from '../lib/api';
-import { getUnifiedVaultAddress, UNIFIED_VAULT_ABI } from '../lib/contracts';
 
 export default function ReceiveCCTP() {
   const { address, isConnected } = useAccount();
@@ -14,7 +13,6 @@ export default function ReceiveCCTP() {
   const [error, setError] = useState('');
   const [attestation, setAttestation] = useState<any>(null);
 
-  const { writeContract } = useWriteContract();
 
   const handleFetchAttestation = async () => {
     if (!transactionHash || !sourceDomain) {
@@ -59,20 +57,19 @@ export default function ReceiveCCTP() {
     setError('');
 
     try {
-      const vaultAddress = await getUnifiedVaultAddress('base-sepolia');
-      if (!vaultAddress) {
-        setError('UnifiedVault not found');
-        return;
+      // Use API endpoint which uses CDP wallet
+      const result = await cctpApi.receiveBridgedUSDC(
+        attestation.message,
+        attestation.attestation
+      );
+
+      if (result.success) {
+        alert(`USDC received successfully! Transaction: ${result.transactionHash}`);
+        setTransactionHash('');
+        setAttestation(null);
+      } else {
+        setError(result.error || 'Failed to receive USDC');
       }
-
-      writeContract({
-        address: vaultAddress,
-        abi: UNIFIED_VAULT_ABI,
-        functionName: 'receiveBridgedUSDC',
-        args: [attestation.message, attestation.attestation],
-      });
-
-      alert('USDC reception initiated! Check transaction status.');
     } catch (err: any) {
       console.error('Receive error:', err);
       setError(err.message || 'Failed to receive USDC');
@@ -86,7 +83,8 @@ export default function ReceiveCCTP() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
           <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600">Please connect your wallet to receive bridged USDC</p>
+          <p className="text-gray-600 mb-6">Please connect your wallet to receive bridged USDC</p>
+          <ConnectButton />
         </div>
       </div>
     );

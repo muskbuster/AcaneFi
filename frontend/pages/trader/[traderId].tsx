@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAccount, useSignMessage, useChainId, useSwitchChain, useReadContract } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { teeApi, tradeApi, cctpApi } from '../../lib/api';
 import { baseSepolia } from 'wagmi/chains';
-import { getUSDCAddress, USDC_ABI, getUnifiedVaultAddress, UNIFIED_VAULT_ABI } from '../../lib/contracts';
-import { formatUnits } from 'viem';
+import { getUSDCAddress, USDC_ABI } from '../../lib/contracts';
+import { formatUnits, parseUnits } from 'viem';
+import CreatePositionForm from '../../components/CreatePositionForm';
+import Header from '../../components/Header';
 
 interface Trader {
   id: number;
@@ -244,8 +247,9 @@ export default function TraderDashboard() {
   const totalPnl = positions.reduce((sum, pos) => sum + pos.pnl, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
-      <div className="container mx-auto px-4 max-w-6xl">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <Header />
+      <div className="container mx-auto px-4 max-w-6xl py-12">
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
           <div className="flex justify-between items-start mb-6">
             <div>
@@ -350,9 +354,14 @@ export default function TraderDashboard() {
         </div>
 
         {isTraderOwner && (
-          <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Submit Trading Signal</h2>
-            <form onSubmit={handleSubmitSignal} className="space-y-4">
+          <>
+            <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Create Position</h2>
+              <CreatePositionForm traderId={trader.traderId} traderAddress={trader.address} onSuccess={loadData} />
+            </div>
+            <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Submit Trading Signal</h2>
+              <form onSubmit={handleSubmitSignal} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -415,6 +424,7 @@ export default function TraderDashboard() {
               </button>
             </form>
           </div>
+          </>
         )}
 
         <div className="bg-white rounded-lg shadow-lg p-8">

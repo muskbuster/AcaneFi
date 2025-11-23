@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { parseUnits } from 'viem';
@@ -188,7 +189,7 @@ export default function Deposit() {
           ],
         });
       } else if (chainId === baseSepolia.id) {
-        // Direct deposit on Base Sepolia via UnifiedVault
+        // Direct deposit on Base Sepolia - deposit directly to UnifiedVault
         const vaultAddress = await getUnifiedVaultAddress(chain);
         if (!vaultAddress || vaultAddress === '0x0000000000000000000000000000000000000000') {
           setError('UnifiedVault not deployed on this chain');
@@ -196,10 +197,13 @@ export default function Deposit() {
           return;
         }
 
-        // For direct deposits, we can use depositViaUSDCOFT or direct VaultFactory
-        // For now, show message
-        setError('Direct deposit on Base Sepolia - use USDCOFT or VaultFactory directly');
-        setLoading(false);
+        // Direct deposit on Base Sepolia - no bridging needed
+        writeContract({
+          address: vaultAddress,
+          abi: UNIFIED_VAULT_ABI,
+          functionName: 'depositViaCCTP',
+          args: [BigInt(selectedTrader), depositAmount, maxFee, minFinalityThreshold],
+        });
       }
     } catch (err: any) {
       console.error('Deposit error:', err);
@@ -272,7 +276,8 @@ export default function Deposit() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
           <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600">Please connect your wallet to make a deposit</p>
+          <p className="text-gray-600 mb-6">Please connect your wallet to make a deposit</p>
+          <ConnectButton />
         </div>
       </div>
     );

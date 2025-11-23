@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useRouter } from 'next/router';
 import { teeApi } from '../../lib/api';
 
@@ -53,7 +54,8 @@ export default function TraderRegister() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
           <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
-          <p className="text-gray-600">Please connect your wallet to register as a trader</p>
+          <p className="text-gray-600 mb-6">Please connect your wallet to register as a trader</p>
+          <ConnectButton />
         </div>
       </div>
     );
