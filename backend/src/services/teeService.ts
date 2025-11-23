@@ -541,6 +541,28 @@ export class TEEService {
   }> {
     const { ethers } = await import('ethers');
     const { cdpWalletService } = await import('./cdpWalletService.js');
+    const { rariDepositStorage } = await import('./rariDepositStorage.js');
+
+    // Fetch transaction from CAFF node (just to get it, no processing)
+    try {
+      // Try to get deposit from storage to find transaction hash
+      const storedDeposit = rariDepositStorage.getDepositByNonce(nonce);
+      if (storedDeposit?.depositTxHash) {
+        // Connect to CAFF node
+        const caffProvider = new ethers.JsonRpcProvider('https://rari.caff.testnet.espresso.network');
+        const tx = await caffProvider.getTransaction(storedDeposit.depositTxHash);
+        if (tx) {
+          console.log(`📡 Fetched transaction from CAFF node: ${storedDeposit.depositTxHash}`);
+          console.log(`   Block Number: ${tx.blockNumber || 'pending'}`);
+          console.log(`   From: ${tx.from}`);
+          console.log(`   To: ${tx.to}`);
+          console.log(`   Value: ${ethers.formatEther(tx.value || 0)} ETH`);
+        }
+      }
+    } catch (caffError: any) {
+      // Non-critical - just log if CAFF fetch fails
+      console.warn(`⚠️  Could not fetch transaction from CAFF node: ${caffError.message}`);
+    }
 
     // Initialize CDP wallet to get TEE address
     await cdpWalletService.initialize();

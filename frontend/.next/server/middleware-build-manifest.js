@@ -24,25 +24,15 @@ self.__BUILD_MANIFEST = {
       "static/chunks/main.js",
       "static/chunks/pages/_error.js"
     ],
-    "/deposit": [
+    "/mint-mockusdc": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",
-      "static/chunks/pages/deposit.js"
-    ],
-    "/deposit-rari": [
-      "static/chunks/webpack.js",
-      "static/chunks/main.js",
-      "static/chunks/pages/deposit-rari.js"
+      "static/chunks/pages/mint-mockusdc.js"
     ],
     "/trader/[traderId]": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",
       "static/chunks/pages/trader/[traderId].js"
-    ],
-    "/trader/register": [
-      "static/chunks/webpack.js",
-      "static/chunks/main.js",
-      "static/chunks/pages/trader/register.js"
     ]
   },
   "ampFirstPages": []

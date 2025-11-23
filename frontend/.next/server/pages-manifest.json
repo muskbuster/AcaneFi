@@ -2,9 +2,7 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
+  "/mint-mockusdc": "pages/mint-mockusdc.js",
   "/": "pages/index.js",
-  "/trader/register": "pages/trader/register.js",
-  "/deposit": "pages/deposit.js",
-  "/trader/[traderId]": "pages/trader/[traderId].js",
-  "/deposit-rari": "pages/deposit-rari.js"
+  "/trader/[traderId]": "pages/trader/[traderId].js"
 }
