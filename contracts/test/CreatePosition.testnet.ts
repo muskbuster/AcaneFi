@@ -60,7 +60,7 @@ describe("Create Position Test - Testnet", function () {
 
     // Step 2: Get TEE wallet address and approve USDC from TEE wallet
     // The TEE wallet (CDP wallet) needs to approve USDC to MockUniswap
-    const apiUrl = process.env.API_URL || 'http://localhost:3001';
+    const apiUrl = process.env.API_URL || 'http://localhost:3002';
     
     // Get TEE wallet address from backend (we'll need to approve from that wallet)
     // For now, we'll use the deployer to approve, but in production, TEE wallet should approve
@@ -160,7 +160,7 @@ describe("Create Position Test - Testnet", function () {
 
   it("Should create a position via TEE API (WBTC)", async function () {
     const { deployer, usdc, mockUniswap, mockWBTCAddress } = await getContracts();
-    const apiUrl = process.env.API_URL || 'http://localhost:3001';
+    const apiUrl = process.env.API_URL || 'http://localhost:3002';
 
     const swapAmount = ethers.parseUnits("1", USDC_DECIMALS); // 1 USDC
 
@@ -186,7 +186,7 @@ describe("Create Position Test - Testnet", function () {
 
   it("Should create a position via TEE API (ZEC)", async function () {
     const { deployer, usdc, mockUniswap, mockZECAddress } = await getContracts();
-    const apiUrl = process.env.API_URL || 'http://localhost:3001';
+    const apiUrl = process.env.API_URL || 'http://localhost:3002';
 
     const swapAmount = ethers.parseUnits("1", USDC_DECIMALS); // 1 USDC
 

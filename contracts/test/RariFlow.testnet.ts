@@ -175,7 +175,7 @@ describe("Rari Attested Flow Test - Testnet", function () {
       console.log(`   Nonce: ${nonce.toString()}`);
       console.log(`   Source Chain ID: ${RARI_CHAIN_ID.toString()}`);
       
-      const apiUrl = process.env.API_URL || 'http://localhost:3001';
+      const apiUrl = process.env.API_URL || 'http://localhost:3002';
       const attestationEndpoint = `${apiUrl}/api/rari/attestation?amount=${amount.toString()}&nonce=${nonce.toString()}`;
       
       console.log(`   Calling API: ${attestationEndpoint}`);
@@ -210,7 +210,7 @@ describe("Rari Attested Flow Test - Testnet", function () {
       console.log(`   Source Chain ID: ${RARI_CHAIN_ID.toString()}`);
       console.log(`   Signature: ${attestationData.signature.substring(0, 20)}...`);
       
-      const verifyApiUrl = process.env.API_URL || 'http://localhost:3001';
+      const verifyApiUrl = process.env.API_URL || 'http://localhost:3002';
       const verifyEndpoint = `${verifyApiUrl}/api/tee/verify-rari-deposit`;
       
       let transactionHash: string;
@@ -300,7 +300,7 @@ describe("Rari Attested Flow Test - Testnet", function () {
       
       // Try to use the same nonce again via TEE API (should fail)
       // Note: This will fail either because receipt already used OR invalid signature
-      const apiUrl = process.env.API_URL || 'http://localhost:3001';
+      const apiUrl = process.env.API_URL || 'http://localhost:3002';
       const verifyEndpoint = `${apiUrl}/api/tee/verify-rari-deposit`;
       
       try {

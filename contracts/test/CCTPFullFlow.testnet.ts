@@ -364,7 +364,7 @@ describe("CCTP Full Flow Test - Testnet", function () {
       console.log(`   Attestation: ${attestation.substring(0, 20)}...`);
       
       // Call the backend API endpoint which uses CDP wallet
-      const apiUrl = process.env.API_URL || 'http://localhost:3001';
+      const apiUrl = process.env.API_URL || 'http://localhost:3002';
       const receiveEndpoint = `${apiUrl}/api/cctp/receive`;
       
       console.log(`   Calling API: ${receiveEndpoint}`);

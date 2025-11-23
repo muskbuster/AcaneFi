@@ -1,0 +1,19 @@
+{
+  "name": "arcanefi",
+  "version": "1.0.0",
+  "description": "Cross-chain non-custodial copy trading platform",
+  "private": true,
+  "workspaces": [
+    "contracts",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "install:all": "npm install && cd contracts && npm install && cd ../backend && npm install && cd ../frontend && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:contracts": "cd contracts && npm run build",
+    "test:contracts": "cd contracts && npm test"
+  }
+}
+
