@@ -404,7 +404,6 @@ export class TEEService {
    */
   async getAllTraders(): Promise<Trader[]> {
     const { ethers } = await import('ethers');
-    const { cdpWalletService } = await import('./cdpWalletService.js');
 
     try {
       const unifiedVaultAddress = process.env.UNIFIED_VAULT_BASE_SEPOLIA;
@@ -413,8 +412,9 @@ export class TEEService {
         return [];
       }
 
-      await cdpWalletService.initialize();
-      const provider = await cdpWalletService.getProvider('base-sepolia');
+      // Use regular RPC provider for read-only operations (no CDP needed)
+      const rpcUrl = process.env.RPC_BASE_SEPOLIA || 'https://sepolia.base.org';
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
 
       // Get VaultFactory address from UnifiedVault
       const unifiedVaultABI = [
