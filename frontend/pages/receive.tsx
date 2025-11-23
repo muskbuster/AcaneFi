@@ -345,6 +345,30 @@ export default function Receive() {
         });
 
         if (result.success) {
+          // Check if deposit was already received
+          if (result.alreadyReceived) {
+            const txHash = result.transactionHash;
+            if (txHash) {
+              alert(`This deposit has already been received! Transaction: ${txHash}`);
+              // Mark as redeemed if we have the transaction hash
+              if (selectedDeposit) {
+                try {
+                  await rariApi.markAsRedeemed({
+                    id: selectedDeposit.id,
+                    redeemTxHash: txHash,
+                  });
+                  await loadRariDeposits();
+                } catch (err) {
+                  console.error('Failed to mark deposit as redeemed:', err);
+                }
+              }
+            } else {
+              alert('This deposit has already been received, but the transaction hash is not available.');
+            }
+            setReceiving(false);
+            return;
+          }
+
           const txHash = result.transactionHash || result.deposit?.transactionHash;
           
           if (!txHash) {

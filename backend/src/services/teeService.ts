@@ -536,6 +536,7 @@ export class TEEService {
     verified: boolean;
     deposit?: any;
     transactionHash?: string;
+    alreadyReceived?: boolean;
     message: string;
   }> {
     const { ethers } = await import('ethers');
@@ -611,7 +612,7 @@ export class TEEService {
     console.log(`   TEE Wallet: ${teeWalletAddress}`);
     console.log(`   UnifiedVault: ${unifiedVaultAddress}`);
 
-    // UnifiedVault ABI for receiveAttested
+    // UnifiedVault ABI for receiveAttested and attestedReceipts
     const unifiedVaultABI = [
       {
         name: 'receiveAttested',
@@ -625,6 +626,13 @@ export class TEEService {
         ],
         outputs: [],
       },
+      {
+        name: 'attestedReceipts',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: '', type: 'bytes32' }],
+        outputs: [{ name: '', type: 'bool' }],
+      },
     ];
 
     // Get provider and contract instance
@@ -634,6 +642,56 @@ export class TEEService {
       unifiedVaultABI,
       provider
     );
+
+    // Check if receipt was already used by computing receipt hash
+    const receiptHash = ethers.keccak256(
+      ethers.solidityPacked(
+        ['address', 'uint256', 'uint256', 'uint256', 'uint256'],
+        [
+          unifiedVaultAddress,
+          amountBigInt,
+          nonceBigInt,
+          sourceChainIdBigInt,
+          BASE_SEPOLIA_CHAIN_ID
+        ]
+      )
+    );
+
+    try {
+      const receiptUsed = await unifiedVault.attestedReceipts(receiptHash);
+      if (receiptUsed) {
+        console.log(`⚠️  Receipt already used for nonce ${nonceBigInt.toString()}`);
+        
+        // Try to find the transaction hash from event logs
+        let previousTxHash: string | undefined;
+        try {
+          const filter = unifiedVault.filters.AttestedReceiptReceived(
+            teeWalletAddress,
+            amountBigInt,
+            nonceBigInt,
+            sourceChainIdBigInt,
+            receiptHash
+          );
+          const events = await unifiedVault.queryFilter(filter);
+          if (events.length > 0 && events[0].transactionHash) {
+            previousTxHash = events[0].transactionHash;
+            console.log(`   Found previous transaction: ${previousTxHash}`);
+          }
+        } catch (eventError) {
+          console.warn('Could not query event logs:', eventError);
+        }
+
+        return {
+          verified: false,
+          alreadyReceived: true,
+          transactionHash: previousTxHash,
+          message: `This deposit has already been received. ${previousTxHash ? `Transaction: ${previousTxHash}` : 'The receipt was already used.'}`,
+        };
+      }
+    } catch (checkError: any) {
+      console.warn('Could not check receipt status:', checkError);
+      // Continue with gas estimation
+    }
 
     // Convert signature hex string to bytes
     const signatureBytes = ethers.getBytes(signature);
@@ -658,6 +716,36 @@ export class TEEService {
       console.log(`   Estimated gas: ${gasEstimate.toString()}`);
     } catch (gasError: any) {
       console.error('Gas estimation failed:', gasError);
+      
+      // Check if error is due to receipt already used
+      if (gasError.message?.includes('Receipt already used')) {
+        // Try to find the transaction hash from event logs
+        let previousTxHash: string | undefined;
+        try {
+          const filter = unifiedVault.filters.AttestedReceiptReceived(
+            teeWalletAddress,
+            amountBigInt,
+            nonceBigInt,
+            sourceChainIdBigInt,
+            receiptHash
+          );
+          const events = await unifiedVault.queryFilter(filter);
+          if (events.length > 0 && events[0].transactionHash) {
+            previousTxHash = events[0].transactionHash;
+            console.log(`   Found previous transaction: ${previousTxHash}`);
+          }
+        } catch (eventError) {
+          console.warn('Could not query event logs:', eventError);
+        }
+
+        return {
+          verified: false,
+          alreadyReceived: true,
+          transactionHash: previousTxHash,
+          message: `This deposit has already been received. ${previousTxHash ? `Transaction: ${previousTxHash}` : 'The receipt was already used.'}`,
+        };
+      }
+      
       return {
         verified: false,
         message: `Gas estimation failed: ${gasError.message || 'Unknown error'}. The deposit may have already been received or the contract state is invalid.`,
